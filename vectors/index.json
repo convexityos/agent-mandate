@@ -1,0 +1,22 @@
+{
+  "version": "am/1",
+  "suites": [
+    {
+      "file": "chain.json",
+      "kind": "chain",
+      "count": 30
+    },
+    {
+      "file": "caveats.json",
+      "kind": "caveats",
+      "count": 8
+    },
+    {
+      "file": "uri.json",
+      "kind": "uri",
+      "count": 7
+    }
+  ],
+  "keys": "keys.json",
+  "now": 1800000000
+}

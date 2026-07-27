@@ -1,0 +1,97 @@
+{
+  "vectors": [
+    {
+      "id": "uri/decode-before-resolve",
+      "spec": "§6.4",
+      "title": "unreserved characters are decoded before dot-segments are resolved",
+      "why": "The order is the whole check. `.` is unreserved, so %2E%2E decodes to a real `..` and — followed by a literal slash — becomes a segment that must be resolved away. An implementation that resolves before decoding leaves the escape intact through normalization, where it re-expands downstream after the verifier has approved it.",
+      "op": "canonicalize",
+      "input": "https://api.example.com/v3/%2E%2E/admin",
+      "expect": {
+        "output": "https://api.example.com/admin"
+      }
+    },
+    {
+      "id": "uri/encoded-slash-is-not-a-separator",
+      "spec": "§6.4",
+      "title": "a reserved character stays encoded, so %2F never becomes a path separator",
+      "why": "The other half of the same rule, and the one that looks like a bug until you see it. Only *unreserved* characters are decoded — `/` is a reserved delimiter, so %2E%2E%2F canonicalizes to `..%2F`, a single opaque segment rather than a traversal. Decoding it would manufacture a path separator the requester never sent, which is a way to escape a grant rather than a way to enforce one.",
+      "op": "canonicalize",
+      "input": "https://api.example.com/v3/%2E%2E%2Fadmin",
+      "expect": {
+        "output": "https://api.example.com/v3/..%2Fadmin"
+      }
+    },
+    {
+      "id": "uri/default-port-stripped",
+      "spec": "§6.4",
+      "title": "a scheme default port is removed so one grant has one spelling",
+      "why": "Otherwise https://h:443/x and https://h/x are two different grants for one resource.",
+      "op": "canonicalize",
+      "input": "https://API.Example.com:443/v3/./forecast",
+      "expect": {
+        "output": "https://api.example.com/v3/forecast"
+      }
+    },
+    {
+      "id": "uri/userinfo-rejected",
+      "spec": "§6.4",
+      "title": "userinfo in the authority is refused outright",
+      "why": "https://evil.com@good.com/ is a read-the-wrong-host confusion with no legitimate use in a resource grant. Refusing is safer than picking a host.",
+      "op": "canonicalize",
+      "input": "https://evil.com@good.com/v3",
+      "expect": {
+        "output": null
+      }
+    },
+    {
+      "id": "uri/wildcard-matches-one-label",
+      "spec": "§6.4",
+      "title": "a host wildcard matches exactly one non-empty label",
+      "why": "*.example.com must not cover a.b.example.com. An implementation using a suffix match grants a whole subtree it was never given.",
+      "op": "hostSetContains",
+      "parent": [
+        "*.example.com"
+      ],
+      "child": [
+        "a.b.example.com"
+      ],
+      "expect": {
+        "result": false
+      }
+    },
+    {
+      "id": "uri/path-prefix-containment",
+      "spec": "§6.4",
+      "title": "a narrower path prefix is contained by a wider one",
+      "why": "The ordinary positive case, so a conforming implementation is not merely refusing everything.",
+      "op": "uriSetContains",
+      "parent": [
+        "https://api.example.com/v3/*"
+      ],
+      "child": [
+        "https://api.example.com/v3/forecast/*"
+      ],
+      "expect": {
+        "result": true
+      }
+    },
+    {
+      "id": "uri/set-containment-needs-single-cover",
+      "spec": "§6.4",
+      "title": "each child pattern must be covered by one single parent pattern",
+      "why": "Sound but incomplete on purpose: a child covered only by the union of two parent patterns is refused. Incompleteness costs an issuer an awkward error; unsoundness costs the principal their balance.",
+      "op": "uriSetContains",
+      "parent": [
+        "https://api.example.com/a/*",
+        "https://api.example.com/b/*"
+      ],
+      "child": [
+        "https://api.example.com/*"
+      ],
+      "expect": {
+        "result": false
+      }
+    }
+  ]
+}

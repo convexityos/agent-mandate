@@ -1,0 +1,60 @@
+{
+  "note": "Test keys, published deliberately. Each seed is a 32-byte Ed25519 seed as defined by RFC 8032 §5.1.5 — derive the public key from it and you should get the did and jkt below. Never use these for anything.",
+  "keys": [
+    {
+      "name": "principal",
+      "seedHex": "0101010101010101010101010101010101010101010101010101010101010101",
+      "did": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+      "jwk": {
+        "crv": "Ed25519",
+        "x": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+        "kty": "OKP"
+      },
+      "jkt": "UDDReOZl1ipXAfp9wYsm13sDBMK5og--QWdBjzuf6o4"
+    },
+    {
+      "name": "agentA",
+      "seedHex": "0202020202020202020202020202020202020202020202020202020202020202",
+      "did": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH",
+      "jwk": {
+        "crv": "Ed25519",
+        "x": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+        "kty": "OKP"
+      },
+      "jkt": "aVBtapLd11SUVKIMGJfPzOEDuN0sXcmzJQNVT-_sKEU"
+    },
+    {
+      "name": "agentB",
+      "seedHex": "0303030303030303030303030303030303030303030303030303030303030303",
+      "did": "did:key:z6MkvRXNYcE7MMduynWTgeKbDaT1iijDSC8pZqXZc8rHPrf2",
+      "jwk": {
+        "crv": "Ed25519",
+        "x": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E",
+        "kty": "OKP"
+      },
+      "jkt": "nRIE2VmKdMjL1JD7tbV7fXVgXxmv0GKnMFWRUJMTf9Q"
+    },
+    {
+      "name": "agentC",
+      "seedHex": "0404040404040404040404040404040404040404040404040404040404040404",
+      "did": "did:key:z6Mkt6316e2PN3mZdB6N9CrzomJYUd1s5yBZi1XYHmwT9TUP",
+      "jwk": {
+        "crv": "Ed25519",
+        "x": "ypOsFwUYcHHWe4PH_w7-gQjo7EUwV113JoeTM9vavnw",
+        "kty": "OKP"
+      },
+      "jkt": "d8Me3uJ82jhdsCstWyVMr3_I2ueeTYG5agM1-2r1_bY"
+    },
+    {
+      "name": "stranger",
+      "seedHex": "0505050505050505050505050505050505050505050505050505050505050505",
+      "did": "did:key:z6MkmtWtY63GQVBrpMyRJWEzsnxfsGkemu6CtMDwGTv4RYj2",
+      "jwk": {
+        "crv": "Ed25519",
+        "x": "bnoc3Smwt4_ROvTFWY_v9O8qlxZuPKby5Pv8zYBQW_E",
+        "kty": "OKP"
+      },
+      "jkt": "0YuCW4N9LKPsO0jPKKgDYo3H7HH2LkiT8YLuFGslZXI"
+    }
+  ]
+}

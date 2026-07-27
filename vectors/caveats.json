@@ -1,0 +1,171 @@
+{
+  "vectors": [
+    {
+      "id": "caveats/absence-is-top",
+      "spec": "§6.1",
+      "title": "a child may introduce a caveat its parent does not declare",
+      "why": "Absence is ⊤, so introducing a constraint is narrowing, never widening.",
+      "op": "narrows",
+      "child": {
+        "settle": "escrow_human"
+      },
+      "parent": {},
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "caveats/settle-ordered-by-authority",
+      "spec": "§6.2",
+      "title": "settle is ordered by authority granted, not by magnitude",
+      "why": "Escrow grants less freedom than immediate settlement, so it sits lower. An implementation that orders these by name or by enum index the other way round lets a child escape escrow.",
+      "op": "narrows",
+      "child": {
+        "settle": "immediate"
+      },
+      "parent": {
+        "settle": "escrow_schema"
+      },
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "caveats/step-up-inverted",
+      "spec": "§6.2",
+      "title": "a lower step-up threshold is narrower, not wider",
+      "why": "A smaller `over` means more spends need a human. Numerically inverted, ordered correctly.",
+      "op": "narrows",
+      "child": {
+        "step_up": {
+          "over": {
+            "cur": "USD",
+            "amt": "1.00"
+          }
+        }
+      },
+      "parent": {
+        "step_up": {
+          "over": {
+            "cur": "USD",
+            "amt": "5.00"
+          }
+        }
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "caveats/effect-narrows-toward-read",
+      "spec": "§6.2",
+      "title": "effect narrows toward read and never widens",
+      "why": "Structurally identical to settle: most authority first, index is the lattice position.",
+      "op": "narrows",
+      "child": {
+        "effect": "irreversible"
+      },
+      "parent": {
+        "effect": "write"
+      },
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "caveats/incomparable-rates-rejected",
+      "spec": "§6.5",
+      "title": "genuinely incomparable rates are rejected rather than guessed",
+      "why": "100/PT10M permits fewer per burst than 500/PT1H but 600/hour sustained. Neither is narrower, so the comparator refuses instead of picking one.",
+      "op": "narrows",
+      "child": {
+        "rate": {
+          "n": 100,
+          "per": "PT10M"
+        }
+      },
+      "parent": {
+        "rate": {
+          "n": 500,
+          "per": "PT1H"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "caveats/meet-picks-narrower",
+      "spec": "§6.3",
+      "title": "meet takes the lower bound on every dimension",
+      "why": "The fold is what re-applies ancestor constraints; it must never widen.",
+      "op": "meet",
+      "a": {
+        "max_total": {
+          "cur": "USD",
+          "amt": "100.00"
+        },
+        "settle": "immediate",
+        "effect": "irreversible"
+      },
+      "b": {
+        "max_total": {
+          "cur": "USD",
+          "amt": "10.00"
+        },
+        "settle": "escrow_human",
+        "effect": "read"
+      },
+      "expect": {
+        "result": {
+          "max_total": {
+            "cur": "USD",
+            "amt": "10.00"
+          },
+          "settle": "escrow_human",
+          "effect": "read"
+        }
+      }
+    },
+    {
+      "id": "caveats/meet-of-different-tasks-is-bottom",
+      "spec": "§6.3",
+      "title": "the meet of two different pinned discrete values is ⊥, not either operand",
+      "why": "Returning either operand makes `meet` non-commutative, which is exactly what the property tests caught. ⊥ is a valid lattice element and deliberately not a valid wire value, so a fold that reaches it fails validation.",
+      "op": "meet",
+      "a": {
+        "task": "tsk_a"
+      },
+      "b": {
+        "task": "tsk_b"
+      },
+      "expect": {
+        "bottom": true
+      }
+    },
+    {
+      "id": "caveats/unregistered-key-rejected",
+      "spec": "§6.2",
+      "title": "an unregistered caveat key fails validation",
+      "why": "Fail closed on anything the registry does not define.",
+      "op": "validate",
+      "value": {
+        "max_total": {
+          "cur": "USD",
+          "amt": "1.00"
+        },
+        "maxTotal": {
+          "cur": "USD",
+          "amt": "999.00"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "code": "unknown_caveat"
+      }
+    }
+  ]
+}

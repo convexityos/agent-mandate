@@ -1,0 +1,842 @@
+{
+  "vectors": [
+    {
+      "id": "chain/root-only-accepted",
+      "spec": "§7",
+      "title": "a single root mandate from a trusted issuer is accepted",
+      "why": "The baseline. An implementation that fails this is not verifying, it is refusing.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "chain/two-hop-attenuation-accepted",
+      "spec": "§7",
+      "title": "a genuinely narrower delegation is accepted and folds to the tighter grant",
+      "why": "The worked delegation. `effective` is the meet of the whole chain, not the leaf.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMC4wMCJ9LCJtYXhfcGVyX3R4biI6eyJjdXIiOiJVU0QiLCJhbXQiOiIwLjUwIn0sImRlcHRoIjoyfX0.zTqeYjLRoUDTQSPxCjRJthFC7YlapUdffkEh6SEmGSDkjVwyPkJUef3aqr-iFuL5QtvMQq9-00g37U5FhrmvAA"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": true,
+        "effective": {
+          "max_total": {
+            "cur": "USD",
+            "amt": "10.00"
+          },
+          "max_per_txn": {
+            "cur": "USD",
+            "amt": "0.50"
+          },
+          "aud": [
+            "*.weatherco.com"
+          ],
+          "resources": [
+            "https://api.weatherco.com/v3/*"
+          ],
+          "purpose": [
+            "research.readonly"
+          ],
+          "depth": 2,
+          "delegable": true,
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "id": "chain/child-widens-rejected",
+      "spec": "§6.1",
+      "title": "a child that raises a parent cap is rejected",
+      "why": "Attenuation is the only direction the lattice permits.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF9wZXJfdHhuIjp7ImN1ciI6IlVTRCIsImFtdCI6IjUuMDAifX19.UJH8U6aDl0I211PFJi1hFrwLbwNGKAF8VF5EDOE-9O_ew4YxUe70vAiZ4HUuh11z5AIifzs1-c8YDnEFdEpWAg"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "chain/grandchild-redeclares-settle",
+      "spec": "§7 step 4",
+      "title": "a grandchild cannot re-declare what its grandparent forbade",
+      "why": "THE non-transitivity case. `narrows` is not pairwise transitive: a middle link that simply omits a caveat is ⊤ on that dimension, so link-against-parent checking passes every hop while the grandchild ends up with authority the grandparent refused. A verifier MUST compare each link against the accumulated meet of everything above it. Comparing against the immediate parent is the natural-looking implementation and it is wrong.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCIsInNldHRsZSI6ImVzY3Jvd19zY2hlbWEifX0.wL8EUYzK-YH276vgebPApaTjNA90kImEg-ArlsA0c8pCfUXXW8wV4JdpwGG_0-4LqcSWoRFAIcENF_0aafy4DA",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMC4wMCJ9fX0.Fmt6ZznzF0By7rclNBjbOvtae9moIb92y8XZ8-1WB8QViOTUL-DLscBHsBHA2Imo0300rs_MFfl7kXztsKdaDQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMiIsImlzcyI6ImRpZDprZXk6ejZNa3ZSWE5ZY0U3TU1kdXluV1RnZUtiRGFUMWlpakRTQzhwWnFYWmM4ckhQcmYyIiwic3ViIjoiZGlkOmtleTp6Nk1rdDYzMTZlMlBOM21aZEI2TjlDcnpvbUpZVWQxczV5QlppMVhZSG13VDlUVVAiLCJwYXIiOiJtbmRfMSIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJkOE1lM3VKODJqaGRzQ3N0V3lWTXIzX0kydWVlVFlHNWFnTTEtMnIxX2JZIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7InNldHRsZSI6ImltbWVkaWF0ZSJ9fQ.dua8yWIQTg8ObLkhdqn55Zj81rywD7piARzXg62BCZjhVcZKAUMTPgEoHqtP7McI5sNrBtx6hX7Eo1H-jkWOBg"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "chain/grandchild-redeclares-resources",
+      "spec": "§7 step 4",
+      "title": "the same escape on a pattern set is also blocked",
+      "why": "The same defect on `resources` rather than an enum, because an implementation can fix the scalar case and leave the set case open.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMC4wMCJ9fX0.Fmt6ZznzF0By7rclNBjbOvtae9moIb92y8XZ8-1WB8QViOTUL-DLscBHsBHA2Imo0300rs_MFfl7kXztsKdaDQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMiIsImlzcyI6ImRpZDprZXk6ejZNa3ZSWE5ZY0U3TU1kdXluV1RnZUtiRGFUMWlpakRTQzhwWnFYWmM4ckhQcmYyIiwic3ViIjoiZGlkOmtleTp6Nk1rdDYzMTZlMlBOM21aZEI2TjlDcnpvbUpZVWQxczV5QlppMVhZSG13VDlUVVAiLCJwYXIiOiJtbmRfMSIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJkOE1lM3VKODJqaGRzQ3N0V3lWTXIzX0kydWVlVFlHNWFnTTEtMnIxX2JZIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7InJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tLyoiXX19.iA_F5sT8YM_h11tiR5DXSO3Kgg8oABVrWGVeh73Y5avosYcDSbccczUrUQ6C_r83axka9v1of1bLCC2oLnN7DA"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "chain/omitted-caveat-reapplied",
+      "spec": "§6.3",
+      "title": "a caveat the child omits is re-applied by the fold, not forgotten",
+      "why": "`narrows` only inspects keys the child declares, so a link omitting `max_total` passes attenuation while declaring itself unbounded. The fold is what re-applies the ancestor's constraint. An implementation that treats the leaf's caveats as the effective grant hands a subagent its grandparent's whole balance.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiI1LjAwIn0sIm1heF9wZXJfdHhuIjp7ImN1ciI6IlVTRCIsImFtdCI6IjEuMDAifSwiYXVkIjpbIioud2VhdGhlcmNvLmNvbSJdLCJyZXNvdXJjZXMiOlsiaHR0cHM6Ly9hcGkud2VhdGhlcmNvLmNvbS92My8qIl0sInB1cnBvc2UiOlsicmVzZWFyY2gucmVhZG9ubHkiXSwiZGVwdGgiOjMsImRlbGVnYWJsZSI6dHJ1ZSwiY3VycmVuY3kiOiJVU0QifX0.zK2YuNuH7g_cafJhbxP7e2Q6ZWINMr6B4EYF1bQI_a9MCDb2n3Grl9nBFKZbZCUHA4Lqtvd3rr4QvJBPpljIAQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF9wZXJfdHhuIjp7ImN1ciI6IlVTRCIsImFtdCI6IjAuNTAifX19.svCAOJT4CySgxSva72Ek7etMBd0-ZSQeDIiGqf4xpiJJO6FnaHTxCkoNry15uHyZIRPm6vx9rtWzj025O7jCBQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": true,
+        "effective": {
+          "max_total": {
+            "cur": "USD",
+            "amt": "5.00"
+          },
+          "max_per_txn": {
+            "cur": "USD",
+            "amt": "0.50"
+          },
+          "aud": [
+            "*.weatherco.com"
+          ],
+          "resources": [
+            "https://api.weatherco.com/v3/*"
+          ],
+          "purpose": [
+            "research.readonly"
+          ],
+          "depth": 2,
+          "delegable": true,
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "id": "chain/traversal-in-resource-rejected",
+      "spec": "§6.4",
+      "title": "a percent-encoded traversal is resolved before the grant is checked",
+      "why": "Canonicalization order is load-bearing: decode unreserved characters FIRST, then resolve dot-segments. `.` is unreserved, so %2E%2E followed by a literal slash decodes to a real `..` segment and must be resolved away — leaving it encoded until after the check means the grant is escaped downstream, once the verifier has already approved it.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/%2E%2E/admin/keys",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "resource_not_covered"
+      }
+    },
+    {
+      "id": "chain/depth-decrements-per-hop",
+      "spec": "§7 step 5",
+      "title": "depth decrements once per hop and omission inherits rather than resetting",
+      "why": "`child.depth ≤ parent.depth − 1` is not reflexive, so it is not a lattice relation and cannot be enforced by the comparator. It is a chain-structural rule. Here depth 1 at the root leaves no room for a second delegation.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MSwiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.bVI8IWHkQU6LcOT_F9GeOTXShaYh6kc8pS6ugpmv0WboEuaNVKqTSlBXxJUit-k5eZ81SpgiPaRGpUnpHIRYDw",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0.-X8lTNlmctwlFNzRRJT2qHBDvZbKhwvIWiBheVBpO4R8ANpB84bMQe4SvNMtFfA9XyPRL5Y73-JuKiMjK0K1Ag",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMiIsImlzcyI6ImRpZDprZXk6ejZNa3ZSWE5ZY0U3TU1kdXluV1RnZUtiRGFUMWlpakRTQzhwWnFYWmM4ckhQcmYyIiwic3ViIjoiZGlkOmtleTp6Nk1rdDYzMTZlMlBOM21aZEI2TjlDcnpvbUpZVWQxczV5QlppMVhZSG13VDlUVVAiLCJwYXIiOiJtbmRfMSIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJkOE1lM3VKODJqaGRzQ3N0V3lWTXIzX0kydWVlVFlHNWFnTTEtMnIxX2JZIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0._4qZV2-sp3jKM-b4qDCLdWlOwYDEsD5zSSjMWoW9T7kiN625PGVyqESFck_sObxpBXfNkIXQnBgvfLyX9QjXBg"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "depth_exceeded"
+      }
+    },
+    {
+      "id": "chain/sealed-mandate-cannot-delegate",
+      "spec": "§6.2",
+      "title": "a mandate with delegable:false admits no child",
+      "why": "Sealing is absolute; a child cannot restore it, and none may exist.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjpmYWxzZSwiY3VycmVuY3kiOiJVU0QifX0.i3WLfreU7QZ_j8i96z8pd0zgJd7CY3pr4z9lX4n6l8FAqiePfSEFW61Cvlx26wnyRUxidByIC3vl_1e14b0FDA",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0.-X8lTNlmctwlFNzRRJT2qHBDvZbKhwvIWiBheVBpO4R8ANpB84bMQe4SvNMtFfA9XyPRL5Y73-JuKiMjK0K1Ag"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "chain/child-cannot-outlive-parent",
+      "spec": "§7 step 6",
+      "title": "a child claiming a later exp than its parent is rejected outright",
+      "why": "The window narrows structurally. A chain whose child claims to outlive its parent is refused at verification rather than silently clamped — the malformed grant is the problem, and an implementation that quietly intersects hides an issuer bug instead of surfacing it.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDAxMDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.HXWGwI800yGlQSs14tI7ANNzDBAAKwnd8geIteOt5jLJ3c1gS8PB5XJ5VuY-bXE5WtCAFmnkkIHn1jRXYFWgAA",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAxMDAwMDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0.wedb5G0Az5YtdFH6Votm4YDqnC5KScgugYagb-bm8FxfT3wHRQT36eSrWoot22n-45hjuT6fimKwQ6M72W3ABQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "attenuation_violation"
+      }
+    },
+    {
+      "id": "chain/window-is-the-intersection",
+      "spec": "§7 step 6",
+      "title": "the effective window is the intersection, so the shortest link governs",
+      "why": "`exp`/`nbf` are top-level claims rather than caveats — listing either in `cav` is rejected — and the effective window is folded from the claims. A short-lived child expires the whole chain even while its parent is still valid.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAxMDAwMDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.FaElmE1KvCoWLrqyOcQqyncH9zY2gTLVCf_6mc5sVc_fgHRbdkVdyVahwDVhq6Fp9thu2xexV_UcaF7le4GTAg",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDAxMDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0.U_IMQu79d0Lba5WQrBp5RHMRF0m7qiQC-To25eqrfEHLn_1CeLSyGVN8JZFC87qt3agWIAnq3-LKgbuBrJvACg"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000500,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "mandate_expired"
+      }
+    },
+    {
+      "id": "chain/exp-in-cav-rejected",
+      "spec": "§6.2",
+      "title": "exp inside cav is rejected as an unregistered caveat",
+      "why": "Two sources of truth for the validity window is one too many. The registry does not contain `exp`, and unknown keys fail closed.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCIsImV4cCI6MTgwMDAwOTk5OX19.x80YDsZbOLJ02HkHcfCNeo8tOKfYxAgV_rEHmANBgm5Lnso2YDIVmRXV7pXtov4Bze-jqLWUBRzsgBJAiw54Bg"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "unknown_caveat"
+      }
+    },
+    {
+      "id": "chain/unregistered-caveat-rejected",
+      "spec": "§6.2",
+      "title": "an unregistered caveat key rejects the whole chain",
+      "why": "Fail closed. A verifier that ignores keys it does not recognise will honour a mandate it does not understand, and a typo like `max_totaI` becomes an unbounded grant.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCIsIm1heF90b3RhSSI6eyJjdXIiOiJVU0QiLCJhbXQiOiI5OTkuMDAifX19.boK0I1XyI800tlkeiVsiT69pcOVos1OQbqQxORl-zJJL5NF1QkQvmHOAdbFKvIoNvseh1LM0eunl94y7vDdKDw"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "unknown_caveat"
+      }
+    },
+    {
+      "id": "chain/ledger-disagreement-rejected",
+      "spec": "§7 step 3",
+      "title": "every link must name the same ledger",
+      "why": "Consumption is accounted at one ledger. A chain whose links disagree has no single place that can enforce a budget.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vb3RoZXItbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0.Q0hMuJeHVW2gFRIZQLpWAR8L8J3pZHtFDZKNSyjLWh81CLJY-8Qwnzgfo9xaUXeHNUFa0ybHr4d6kG7HC611Bg"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "chain_invalid"
+      }
+    },
+    {
+      "id": "chain/untrusted-root-rejected",
+      "spec": "§7 step 1",
+      "title": "a root from an untrusted issuer is rejected",
+      "why": "Trust is anchored at the root and nowhere else.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbXRXdFk2M0dRVkJycE15UkpXRXpzbnhmc0drZW11NkN0TUR3R1R2NFJZajIifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa210V3RZNjNHUVZCcnBNeVJKV0V6c254ZnNHa2VtdTZDdE1Ed0dUdjRSWWoyIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.g3hC0HQ6p8E1qvgoQNrrBKl3kGVB8q3YlyuHa9I1_caSGHf6b7NLFQFVwXB5Ctk6__F1VxbO71d52OnwEl_pBw"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "chain_invalid"
+      }
+    },
+    {
+      "id": "chain/link-not-signed-by-parent-holder",
+      "spec": "§7 step 2",
+      "title": "a link must be signed by the holder of the link above it",
+      "why": "Delegation is the holder passing on a subset of what it holds. A link signed by anyone else is a grant nobody made.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbXRXdFk2M0dRVkJycE15UkpXRXpzbnhmc0drZW11NkN0TUR3R1R2NFJZajIifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa210V3RZNjNHUVZCcnBNeVJKV0V6c254ZnNHa2VtdTZDdE1Ed0dUdjRSWWoyIiwic3ViIjoiZGlkOmtleTp6Nk1rdDYzMTZlMlBOM21aZEI2TjlDcnpvbUpZVWQxczV5QlppMVhZSG13VDlUVVAiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJkOE1lM3VKODJqaGRzQ3N0V3lWTXIzX0kydWVlVFlHNWFnTTEtMnIxX2JZIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0.coVb02h1DV1oNUeI5bdvyucgYwd4JZQXW_hfstsvLe14I827rP0WIs8mkw_1DvL_CPBuc0jPzr9GebO8OCIoBw"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "chain_invalid"
+      }
+    },
+    {
+      "id": "chain/tampered-payload-rejected",
+      "spec": "§7 step 2",
+      "title": "editing the payload after signing invalidates the link",
+      "why": "The obvious one, included because a verifier that parses claims before checking the signature can be steered by them first.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiI5OTk5OTkuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "chain_invalid"
+      }
+    },
+    {
+      "id": "chain/alg-none-rejected",
+      "spec": "§7 step 2",
+      "title": "alg:none is not a signature",
+      "why": "The classic JWT failure. An unsigned token asserts whatever it likes; only EdDSA is acceptable here.",
+      "tokens": [
+        "eyJhbGciOiJub25lIiwidHlwIjoiYXBwbGljYXRpb24vYWdlbnQtbWFuZGF0ZStqd3QifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ."
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "chain_invalid"
+      }
+    },
+    {
+      "id": "chain/host-outside-aud",
+      "spec": "§8",
+      "title": "a host outside aud is refused",
+      "why": "Wildcards match exactly one label; `*.weatherco.com` does not cover another domain. The grant here pins `aud` and deliberately not `resources`, so the vector exercises one rule — see the note on §8 precedence in the README.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF9wZXJfdHhuIjp7ImN1ciI6IlVTRCIsImFtdCI6IjEuMDAifSwiYXVkIjpbIioud2VhdGhlcmNvLmNvbSJdfX0.ycq7w-LjfRKF-iLA9H67GApkn7LB51NK7PrEuKhZmB40YAWL3cSBcmvsBsJfYRIdP8ARPgKrPFCPDySsMwwJCQ"
+      ],
+      "request": {
+        "resource": "https://api.datavendor.io/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "audience_mismatch"
+      }
+    },
+    {
+      "id": "chain/resource-outside-grant",
+      "spec": "§8",
+      "title": "a resource outside the granted patterns is refused",
+      "why": "The counterpart to the aud vector, with `resources` pinned and `aud` left open so only one rule can fire.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF9wZXJfdHhuIjp7ImN1ciI6IlVTRCIsImFtdCI6IjEuMDAifSwicmVzb3VyY2VzIjpbImh0dHBzOi8vYXBpLndlYXRoZXJjby5jb20vdjMvKiJdfX0.nqE9JQFaQB4tS4bOytzjYhlbB0Q2e8GRc9wyQCgIwwrKYUAvZTMWV6G68eNVmZNShNfpuyrkH_gBGrWVPTDuBA"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v9/admin",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "resource_not_covered"
+      }
+    },
+    {
+      "id": "chain/per-txn-cap-enforced",
+      "spec": "§8",
+      "title": "a request over max_per_txn is refused",
+      "why": "The one amount check a stateless verifier can make; budget and rate are ledger state.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "2.00"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "amount_exceeds_cap"
+      }
+    },
+    {
+      "id": "chain/cross-currency-refused",
+      "spec": "§4.3",
+      "title": "a cross-currency comparison fails closed rather than returning false",
+      "why": "A boolean answer would read as \"not over the cap\" at one call site and \"not narrower\" at another. Only one of those is safe, so the comparison errors instead.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "EUR",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "currency_mismatch"
+      }
+    },
+    {
+      "id": "chain/sub-cent-precision-exact",
+      "spec": "§4.3",
+      "title": "amounts below one cent compare exactly",
+      "why": "Per-call pricing routinely runs below a cent. 0.000000002 vs a cap of 0.000000001 must be over, which it is not if the amount has been through a binary float on the way.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMC4wMDAwMDAwMDEifSwiYXVkIjpbIioud2VhdGhlcmNvLmNvbSJdLCJyZXNvdXJjZXMiOlsiaHR0cHM6Ly9hcGkud2VhdGhlcmNvLmNvbS92My8qIl0sInB1cnBvc2UiOlsicmVzZWFyY2gucmVhZG9ubHkiXSwiZGVwdGgiOjMsImRlbGVnYWJsZSI6dHJ1ZSwiY3VycmVuY3kiOiJVU0QifX0.30-w6_iuvxZc7szejUzAcyU64jgKQThOZmABLGr1r8YLpBAYuui0ct7VyadcnnJj9VOk946hNPU0UquFMWVKBQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.000000002"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "amount_exceeds_cap"
+      }
+    },
+    {
+      "id": "chain/purpose-not-granted",
+      "spec": "§8",
+      "title": "a purpose outside the grant is refused, and so is omitting it",
+      "why": "A caller that will not say why cannot be checked against a purpose restriction.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "write",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "purpose_not_covered"
+      }
+    },
+    {
+      "id": "chain/effect-exceeds-grant",
+      "spec": "§6.2",
+      "title": "a call whose blast radius exceeds the granted effect is refused",
+      "why": "Blast radius is a separate axis from cost. A read-only mandate refuses a write at any price, which is the point of having the axis at all.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCIsImVmZmVjdCI6InJlYWQifX0.-3Pf9eiBPVetIkYQydFuSFr4S2jy1LQRq9Ql4XiCKHplLhnHUUCuOLCk56ibREzvN4aw4FMAjApfCY3Pi0GzBA"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance",
+        "effect": "write"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "effect_not_permitted"
+      }
+    },
+    {
+      "id": "chain/effect-undeclared-is-top",
+      "spec": "§6.2",
+      "title": "an undeclared request effect is checked as irreversible",
+      "why": "Absence is ⊤ on the request side as well as the caveat side. A caller unwilling to classify a call does not get the benefit of the doubt, so any mandate that bounds `effect` at all refuses it.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCIsImVmZmVjdCI6InJlYWQifX0.-3Pf9eiBPVetIkYQydFuSFr4S2jy1LQRq9Ql4XiCKHplLhnHUUCuOLCk56ibREzvN4aw4FMAjApfCY3Pi0GzBA"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "effect_not_permitted"
+      }
+    },
+    {
+      "id": "chain/effect-absent-grant-unaffected",
+      "spec": "§17.3",
+      "title": "a mandate that predates the effect axis verifies exactly as before",
+      "why": "The additive guarantee. A mandate issued before a caveat existed must verify identically after it is added, whatever the request now declares.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance",
+        "effect": "irreversible"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "chain/expired-outside-skew",
+      "spec": "§7 step 7",
+      "title": "an expired chain is refused once past the skew tolerance",
+      "why": "Clock skew is tolerated; expiry is not optional.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5MjgwMCwibmJmIjoxNzk5OTkyODAwLCJleHAiOjE3OTk5OTY0MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.hy5JYNj9kSAxhLCAaYHCE0TYbvgewfyo4aiQoFDVmPf2l7epOBwzmKjnI_YUw2xugnMwymhxqCqweDyHb7wPBQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "mandate_expired"
+      }
+    },
+    {
+      "id": "chain/not-yet-valid",
+      "spec": "§7 step 7",
+      "title": "a chain before its nbf is refused",
+      "why": "The other end of the window, which implementations forget more often.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxODAwMDAzNjAwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.FnmvbpnPuawdrSpZXvOAfkx2tGBMtlRUd2jC1v0684zGM9I6EvVoZyihjvFjH-LaLAaTvWzeXI5Ci2dfWi9iAQ"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "expect": {
+        "ok": false,
+        "code": "mandate_expired"
+      }
+    },
+    {
+      "id": "chain/pop-binds-presenter",
+      "spec": "§7 step 9",
+      "title": "the presenter key must match the leaf cnf.jkt",
+      "why": "A stolen chain is useless without the holder key. The message-signature check itself is a transport concern; the binding to `cnf.jkt` is not.",
+      "tokens": [
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rb24zTmVjZDZOa2t5Zm9Hb0h4aWQyem5HYzU5TFUzSzdtdWJhUmNGYkxmTFgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMCIsImlzcyI6ImRpZDprZXk6ejZNa29uM05lY2Q2TmtreWZvR29IeGlkMnpuR2M1OUxVM0s3bXViYVJjRmJMZkxYIiwic3ViIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgiLCJwYXIiOm51bGwsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJhVkJ0YXBMZDExU1VWS0lNR0pmUHpPRUR1TjBzWGNtekpRTlZULV9zS0VVIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7Im1heF90b3RhbCI6eyJjdXIiOiJVU0QiLCJhbXQiOiIxMDAuMDAifSwibWF4X3Blcl90eG4iOnsiY3VyIjoiVVNEIiwiYW10IjoiMS4wMCJ9LCJhdWQiOlsiKi53ZWF0aGVyY28uY29tIl0sInJlc291cmNlcyI6WyJodHRwczovL2FwaS53ZWF0aGVyY28uY29tL3YzLyoiXSwicHVycG9zZSI6WyJyZXNlYXJjaC5yZWFkb25seSJdLCJkZXB0aCI6MywiZGVsZWdhYmxlIjp0cnVlLCJjdXJyZW5jeSI6IlVTRCJ9fQ.nM7HeV-LeN6DP3sGIFHNINW8X2fVwsR0BKBzy-Zi8Chd6HkWruRdO3V27OwC-G_FvFepfBBjPMZONxt2pVbBCQ",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6ImFwcGxpY2F0aW9uL2FnZW50LW1hbmRhdGUrand0Iiwia2lkIjoiZGlkOmtleTp6Nk1rbzloVGdnTXdqU1RFYUphUFVmRTZ0cWN5Mnh2VTZCbk5xM2UzbzhxVkJpeUgifQ.eyJ2IjoiYW0vMSIsInR5cCI6Im1hbmRhdGUiLCJqdGkiOiJtbmRfMSIsImlzcyI6ImRpZDprZXk6ejZNa285aFRnZ013alNURWFKYVBVZkU2dHFjeTJ4dlU2Qm5OcTNlM284cVZCaXlIIiwic3ViIjoiZGlkOmtleTp6Nk1rdlJYTlljRTdNTWR1eW5XVGdlS2JEYVQxaWlqRFNDOHBacVhaYzhySFByZjIiLCJwYXIiOiJtbmRfMCIsImlhdCI6MTc5OTk5OTk0MCwibmJmIjoxNzk5OTk5OTQwLCJleHAiOjE4MDAwMDM2MDAsImNuZiI6eyJqa3QiOiJuUklFMlZtS2RNakwxSkQ3dGJWN2ZYVmdYeG12MEdLbk1GV1JVSk1UZjlRIn0sImxlZGdlciI6Imh0dHBzOi8vbGVkZ2VyLmV4YW1wbGUuY29tIiwiY2F2Ijp7fX0.-X8lTNlmctwlFNzRRJT2qHBDvZbKhwvIWiBheVBpO4R8ANpB84bMQe4SvNMtFfA9XyPRL5Y73-JuKiMjK0K1Ag"
+      ],
+      "request": {
+        "resource": "https://api.weatherco.com/v3/forecast/94110",
+        "amount": {
+          "cur": "USD",
+          "amt": "0.02"
+        },
+        "purpose": "research.readonly",
+        "taskId": "tsk_conformance"
+      },
+      "now": 1800000000,
+      "trustedRootIssuers": [
+        "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+      ],
+      "presenterJkt": "aVBtapLd11SUVKIMGJfPzOEDuN0sXcmzJQNVT-_sKEU",
+      "expect": {
+        "ok": false,
+        "code": "pop_failed"
+      }
+    }
+  ]
+}

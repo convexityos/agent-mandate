@@ -8,6 +8,12 @@ delegated, attenuable, auditable spending authority for autonomous agents.
 npm install && npm test
 ```
 
+**Conformance vectors** live in [`vectors/`](vectors/) — chain in, verdict out,
+so an implementation in any language can check itself without reading this
+TypeScript. Every expectation there is written by hand from the spec rather than
+recorded from this code, which is the only version of that artifact worth
+publishing. See [`vectors/README.md`](vectors/README.md).
+
 ## What's here
 
 | Module | Role |
@@ -18,6 +24,7 @@ npm install && npm test
 | [`src/money.ts`](src/money.ts) | Exact decimal amounts to 9 dp; no floats anywhere |
 | [`src/jws.ts`](src/jws.ts), [`src/didkey.ts`](src/didkey.ts) | Ed25519 JWS, `did:key`, RFC 7638 thumbprints |
 | [`src/sign.ts`](src/sign.ts) | Issuer-side helpers, kept out of the verifier's dependency graph |
+| [`test/vectors.build.ts`](test/vectors.build.ts) | §3.1 — generates the published conformance vectors |
 | [`src/ledger/ledger.ts`](src/ledger/ledger.ts) | §10 — reserve / settle / refund / revoke, path-walk debit |
 | [`src/ledger/store.ts`](src/ledger/store.ts) | Persistence seam; in-memory reference impl with a real critical section |
 | [`src/ledger/sql/sqlite.ts`](src/ledger/sql/sqlite.ts) | Durable store on `node:sqlite` — one writer, serialization for free |
@@ -545,6 +552,10 @@ is the fallback, and the reason that fallback cannot be a constant.
 ## Status
 
 Not audited, not production-ready.
+
+There are 52 published conformance vectors, and they have teeth: swapping the
+verifier to compare each link against its immediate parent — the natural-looking
+implementation — fails exactly the two vectors that name that defect.
 
 Ledger state is now durable — SQLite and Postgres, with the concurrency
 properties run against real row locks rather than a `Map` — the MCP gateway puts
