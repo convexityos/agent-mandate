@@ -22,6 +22,8 @@ import {
   rowToNode,
   rowToReservation,
   rowToSpendEvent,
+  idempotentToRow,
+  rowToIdempotent,
   rowToStepUp,
   stepUpToRow,
   stepUpWhere,
@@ -131,6 +133,14 @@ CREATE TABLE IF NOT EXISTS kill_switch (
 CREATE TABLE IF NOT EXISTS nonce (
   nonce      TEXT PRIMARY KEY,
   expires_at INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS idempotency (
+  key          TEXT PRIMARY KEY,
+  request_hash TEXT NOT NULL,
+  response     TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  expires_at   INTEGER NOT NULL
 ) STRICT;
 `;
 
@@ -271,6 +281,29 @@ export class SqliteStore implements LedgerStore {
       }
       this.run('INSERT INTO nonce (nonce, expires_at) VALUES (?, ?)', [nonce, expiresAt]);
       return true;
+    },
+
+    getIdempotent: async (key) => {
+      const r = this.one(
+        'SELECT * FROM idempotency WHERE key = ? AND expires_at >= ?',
+        [key, this.clock()],
+      );
+      return r === undefined ? undefined : rowToIdempotent(r);
+    },
+
+    putIdempotent: async (record) => {
+      this.run('DELETE FROM idempotency WHERE expires_at < ?', [this.clock()]);
+      const r = idempotentToRow(record);
+      this.run(
+        `INSERT INTO idempotency (key, request_hash, response, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           request_hash = excluded.request_hash,
+           response = excluded.response,
+           created_at = excluded.created_at,
+           expires_at = excluded.expires_at`,
+        [r['key'], r['request_hash'], r['response'], r['created_at'], r['expires_at']],
+      );
     },
 
     getReservation: async (id) => {

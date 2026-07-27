@@ -37,6 +37,14 @@ export interface ApprovalRequest {
   query?: Record<string, string | undefined>;
   /** Parsed JSON body, if any. */
   body?: unknown;
+  /**
+   * Raw headers, as the server received them. Needed by `LedgerService` for
+   * `Idempotency-Key` and by any `resolvePresenter` that reads an RFC 9421
+   * signature. Case is preserved rather than normalized, because the field names
+   * arrive in whatever case the client sent and lookups here are
+   * case-insensitive by hand.
+   */
+  headers?: Record<string, string | string[] | undefined>;
 }
 
 export interface ApprovalResponse {

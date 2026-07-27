@@ -23,7 +23,7 @@ ordering below rather than for any particular item in it.
 |---|---|---|
 | Semantics | full §6.2 comparator table incl. the `effect` axis, `meet`, `narrows`, pattern containment | — |
 | Verification | §7 chain verification against the accumulated meet, 52 published conformance vectors | — |
-| Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler | a service |
+| Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler, HTTP service | — |
 | Settlement | custodial + non-custodial x402, card/ACH-shaped rail, EIP-712/3009, `authorizationState` | escrow (deliberately — see triage) |
 | Transport | §14 binding, merchant verifier, agent client | a `fetch` anyone would actually import |
 | Agents | signer, directive execution, MCP mandate gateway | harness integration |
@@ -74,18 +74,50 @@ prove the locks and their ordering do.
 
 Everything else in this document assumes state survives a restart. It does.
 
-### 1.2 Ledger service
+### 1.2 Ledger service — **done**
 
-An HTTP daemon over the existing objects: §8 presentation, §9 mint, revoke,
-reconcile, receipt read. [`Merchant`](src/http/merchant.ts) and
-[`client`](src/http/client.ts) are already framework-agnostic, so the protocol
-work is done and what remains is the part that gets written last and matters
-most in an incident:
+[`src/http/service.ts`](src/http/service.ts) over the existing objects, plus a
+`node:http` binding in [`serve.ts`](src/http/serve.ts) so it is a daemon rather
+than a library. All three of the things that get written last:
 
-- idempotency on mint (a retried mint that debits twice is the whole failure
-  class this project exists to prevent);
-- a structured audit log keyed by `spendId` and reservation state transitions;
-- health and metrics — outstanding `settling` count is the number to page on.
+**Idempotency is inside the transaction, not around it.** `Idempotency-Key`
+passes through to `Ledger.reserve`, which claims the key in the *same*
+transaction as the debit. A service that claimed, called, then recorded has
+three failure windows — crash before and the key is stranded so the caller can
+never learn the outcome, crash after and the retry debits twice, and two
+concurrent first uses race unless the claim itself is atomic. Which is the dual-
+write problem this ledger already solved once for settlement, so it gets the same
+answer.
+
+Two details that matter more than they look:
+
+- A key reused with a *different* request is refused, not answered with the
+  earlier result. Silently returning the first response is worse than either
+  debiting or failing — the caller believes something went through that never
+  did.
+- A refusal is recorded too, including `step_up_required`, where a replay must
+  return the same handle rather than queue the question twice. A retry asks "did
+  my request go through?", and "yes, and it was refused" is an answer.
+
+**The audit log is emitted by the ledger, not the service.** The transitions that
+matter most are the ones the reconciler makes at 3am with no request to attribute
+them to, and a service-level log cannot see those. Events are flat, keyed by
+`spendId`, emitted after commit — an event describing a change that rolled back
+is what makes a log untrustworthy — and a throwing sink is swallowed, because a
+failing log must not turn a completed spend into an error the caller retries.
+
+Writing the tests found the gap: §7 refusals never reached the log at all,
+because `reserve` returns before it opens a transaction. A request outside the
+grant is the *most* common refusal and the one an incident asks about first.
+
+**`am_settling_outstanding` is the number to page on.** It is money that is
+neither spent nor available, and it trending upward means a rail has stopped
+answering.
+
+Not built here, deliberately: the service does not authenticate the presenter.
+§7 step 9 needs a thumbprint the transport already verified, so `presenterJkt` is
+an input via `resolvePresenter`, and `requirePresenter` defaults to on so
+disabling proof-of-possession has to be a choice rather than an omission.
 
 ### 1.3 Reconciler — **done**
 
@@ -361,10 +393,12 @@ a spend that needed a human was the first thing to walk straight through.
 All three exist, and §1.3 and §5.2 with them. §5 is closed: the principal is no
 longer the only party in the protocol without an interface.
 
-The honest shortlist from here is §1.2 (the ledger service, the last piece of §1),
+Section 1 is complete apart from the CLI. The honest shortlist from here is
 §2.2/§2.3 (`mandatedFetch` and the harness hook, both small and both pure
-adoption), and §3.2 (revocation distribution, roughly a day's work and the thing
-offline mode currently bounds only by `exp`).
+adoption), §3.2 (revocation distribution, roughly a day's work and the thing
+offline mode currently bounds only by `exp`), and §1.4 (the CLI, whose
+`am inspect` would have made the §7 non-transitivity bug visible in four
+seconds).
 
 One thing this pass exposed that is not on the list anywhere: **there is no
 migration story.** `CREATE TABLE IF NOT EXISTS` does nothing to a table that

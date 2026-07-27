@@ -6,3 +6,5 @@ export * from './merchant.js';
 export * from './client.js';
 export * from './approval.js';
 export * from './console.js';
+export * from './service.js';
+export * from './serve.js';

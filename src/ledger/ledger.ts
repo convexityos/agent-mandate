@@ -73,6 +73,40 @@ export interface Approver {
   requested(notice: StepUpRequestNotice): void | Promise<void>;
 }
 
+/**
+ * One thing that happened, flat enough to be a log line.
+ *
+ * Keyed by `spendId` wherever there is one, because the question asked during an
+ * incident is always about a particular spend: what was authorized, when did it
+ * change state, and who decided. A log that records only what the service
+ * returned cannot answer that — the transitions that matter most are the ones a
+ * reconciler makes at 3am with nobody's request to attribute them to.
+ */
+export interface AuditEvent {
+  at: number;
+  /** Dotted and stable: `reserve.ok`, `settle.settled`, `stepup.decided`. */
+  event: string;
+  spendId?: string;
+  root?: string;
+  agent?: string;
+  amount?: Money;
+  resource?: string;
+  taskId?: string | null;
+  /** The §15 code, on anything that refused. */
+  code?: ErrorCode;
+  detail?: string;
+  [extra: string]: unknown;
+}
+
+/**
+ * Where audit events go. Synchronous-looking on purpose: a sink that blocks the
+ * ledger is worse than a sink that drops, so implementations should buffer.
+ * Exceptions are swallowed — see `emit`.
+ */
+export interface AuditSink {
+  record(event: AuditEvent): void | Promise<void>;
+}
+
 export type StepUpDecisionResult =
   | { ok: true; approval: StepUpApproval; claims: StepUpDecisionClaims }
   | { ok: false; code: ErrorCode; detail: string };
@@ -120,10 +154,19 @@ export interface LedgerConfig {
   /** Grace period after a spend token expires before an unsettled reservation is swept. */
   reservationGraceSeconds?: number;
   /**
+   * How long a §9 idempotency key is remembered.
+   *
+   * Long enough to outlast any client's retry budget, and short enough that the
+   * recorded spend token has not long expired by the time a replay returns it.
+   */
+  idempotencyTtlSeconds?: number;
+  /**
    * §10.5 — notified when a spend needs a human. Absent, step-ups still queue
    * and are still visible through `pendingStepUps`; nobody is told.
    */
   approver?: Approver;
+  /** Structured audit log. Absent, transitions happen and nothing records them. */
+  audit?: AuditSink;
   /** How long a step-up request waits for a human before it lapses. */
   stepUpRequestTtlSeconds?: number;
   /**
@@ -150,6 +193,15 @@ export interface ReserveRequest {
    * merchant itself.
    */
   quote?: { quoteId?: string; schema?: string; rail?: unknown };
+  /**
+   * §9 — makes this mint replay-safe.
+   *
+   * A caller that retries because a response was slow must not be debited
+   * twice. Supply a key that is stable across retries of the *same* mint and
+   * different for a genuinely new one; the same key with a different request is
+   * refused rather than answered with the earlier result.
+   */
+  idempotencyKey?: string;
 }
 
 export type ReserveResult =
@@ -189,6 +241,19 @@ export type SettleResult =
 
 const sha256 = (s: string) => `sha256:${createHash('sha256').update(s, 'ascii').digest('hex')}`;
 
+/**
+ * UTF-8, unlike `sha256` above.
+ *
+ * That one hashes JWS tokens, which are base64url and therefore ASCII by
+ * construction, so the encoding cannot matter. This one hashes a JSON request
+ * that may contain anything — and Node's `'ascii'` is latin1-equivalent on
+ * encode, truncating code points above U+00FF modulo 256. `Ł` (U+0141) becomes
+ * byte 0x41, which is `A`: a request for `/Łedger` and one for `/Aedger` hash
+ * identically, and the second caller is handed the first one's reservation.
+ */
+const sha256Utf8 = (s: string) =>
+  `sha256:${createHash('sha256').update(s, 'utf8').digest('hex')}`;
+
 export const DIRECTIVE_TYP = 'application/agent-directive+jwt';
 
 /** Ledger-signed directive, so the agent holds evidence of what it was told to do. */
@@ -200,13 +265,17 @@ export function signDirective(directive: Directive, key: AgentKey): string {
 
 export class Ledger {
   private readonly cfg: Required<
-    Omit<LedgerConfig, 'breakers' | 'resolveKey' | 'rail' | 'nonCustodialRail' | 'approver'>
+    Omit<
+      LedgerConfig,
+      'breakers' | 'resolveKey' | 'rail' | 'nonCustodialRail' | 'approver' | 'audit'
+    >
   > & {
     breakers: BreakerConfig;
     resolveKey?: KeyResolver;
     rail?: SettlementRail;
     nonCustodialRail?: NonCustodialRail;
     approver?: Approver;
+    audit?: AuditSink;
   };
 
   constructor(config: LedgerConfig) {
@@ -223,12 +292,14 @@ export class Ledger {
       breakers: { ...DEFAULT_BREAKERS, ...config.breakers },
       spendTtlSeconds: config.spendTtlSeconds ?? DEFAULT_SPEND_TTL_SECONDS,
       reservationGraceSeconds: config.reservationGraceSeconds ?? 300,
+      idempotencyTtlSeconds: config.idempotencyTtlSeconds ?? 86400,
       stepUpRequestTtlSeconds: config.stepUpRequestTtlSeconds ?? 3600,
       stepUpApprovalTtlSeconds: config.stepUpApprovalTtlSeconds ?? 900,
       clock: config.clock ?? (() => Math.floor(Date.now() / 1000)),
       idFactory: config.idFactory ?? ((p) => `${p}_${randomUUID().replace(/-/g, '')}`),
       ...(config.resolveKey !== undefined ? { resolveKey: config.resolveKey } : {}),
       ...(config.approver !== undefined ? { approver: config.approver } : {}),
+      ...(config.audit !== undefined ? { audit: config.audit } : {}),
       ...(config.rail !== undefined ? { rail: config.rail } : {}),
       ...(config.nonCustodialRail !== undefined
         ? { nonCustodialRail: config.nonCustodialRail }
@@ -257,11 +328,31 @@ export class Ledger {
       ...(this.cfg.resolveKey !== undefined ? { resolveKey: this.cfg.resolveKey } : {}),
       ...(req.presenterJkt !== undefined ? { presenterJkt: req.presenterJkt } : {}),
     });
-    if (!verified.ok) return { ok: false, code: verified.code, detail: verified.detail };
+    if (!verified.ok) {
+      // Audited even though it never reached the ledger's state. A refusal at
+      // §7 is the *most* common one — a request outside the grant — and a log
+      // that only records what got as far as a transaction cannot answer "what
+      // did this agent try?", which is the question an incident actually asks.
+      this.emit('reserve.rejected', {
+        amount: req.request.amount,
+        resource: req.request.resource,
+        taskId: req.request.taskId ?? null,
+        code: verified.code,
+        detail: verified.detail,
+      });
+      return { ok: false, code: verified.code, detail: verified.detail };
+    }
 
     const uri = canonicalizeUri(req.request.resource);
     const host = uri === null ? null : hostOfUri(uri);
     if (uri === null || host === null) {
+      this.emit('reserve.rejected', {
+        agent: verified.leaf.sub,
+        amount: req.request.amount,
+        resource: req.request.resource,
+        code: 'resource_not_covered',
+        detail: 'uncanonicalizable resource',
+      });
       return { ok: false, code: 'resource_not_covered', detail: 'uncanonicalizable resource' };
     }
 
@@ -335,9 +426,52 @@ export class Ledger {
     // back is worse than no notification: it trains a human to ignore them.
     let pendingNotice: StepUpRequestNotice | null = null;
 
+    // §9 — the request this key is bound to. The chain, the exact request and
+    // the quote, so a key reused for anything else is caught rather than
+    // answered with the wrong reservation.
+    const requestHash =
+      req.idempotencyKey === undefined
+        ? null
+        : sha256Utf8(
+            JSON.stringify([
+              req.tokens,
+              req.request,
+              req.quote ?? null,
+              req.stepUpHandle ?? null,
+            ]),
+          );
+
     const result = await this.cfg.store.transact(async (tx): Promise<ReserveResult> => {
       pendingNotice = null; // this closure may be retried; only the last run committed
 
+      // --- idempotency (§9) ---
+      //
+      // Inside the transaction, deliberately. Claiming the key in one
+      // transaction and debiting in another is the dual-write problem this
+      // ledger already solved once for settlement: a crash between them either
+      // strands the key, so the caller can never learn what happened, or leaves
+      // it unclaimed, so the retry debits a second time.
+      //
+      // The store locks the key on read even when no row exists yet, so two
+      // concurrent first uses serialize here rather than both proceeding.
+      if (req.idempotencyKey !== undefined) {
+        const seen = await tx.getIdempotent(req.idempotencyKey);
+        if (seen !== undefined) {
+          if (seen.requestHash !== requestHash) {
+            return {
+              ok: false,
+              code: 'chain_invalid',
+              detail: `idempotency key ${req.idempotencyKey} was already used for a different request`,
+            };
+          }
+          return seen.response as ReserveResult;
+        }
+      }
+
+      // Wrapped so every exit from the decision below is recorded under the key
+      // by the single write at the bottom, rather than each of the dozen
+      // `return`s having to remember to do it.
+      const outcome: ReserveResult = await (async (): Promise<ReserveResult> => {
       // --- materialize, verifying that each jti still means what it meant ---
       //
       // One `lockPath` rather than a `getNode` per link: the lock ordering the
@@ -624,7 +758,48 @@ export class Ledger {
           ? { directive: prepared, directiveJws: signDirective(prepared, this.cfg.key) }
           : {}),
       };
+      })();
+
+      // Recorded whatever the verdict. A retry with the same key is asking
+      // "did my request go through?", and "yes, and it was refused" is the
+      // honest answer — including for `step_up_required`, where replaying must
+      // return the same handle rather than queue a second question. A caller
+      // that wants a genuinely fresh attempt uses a fresh key.
+      if (req.idempotencyKey !== undefined && requestHash !== null) {
+        await tx.putIdempotent({
+          key: req.idempotencyKey,
+          requestHash,
+          response: outcome,
+          createdAt: now,
+          expiresAt: now + this.cfg.idempotencyTtlSeconds,
+        });
+      }
+      return outcome;
     });
+
+    if (result.ok) {
+      this.emit('reserve.ok', {
+        spendId: result.spendId,
+        root,
+        agent: verified.leaf.sub,
+        amount: req.request.amount,
+        resource: uri,
+        taskId,
+        expiresAt: result.expiresAt,
+        alerts: result.alerts.map((a) => a.name),
+      });
+    } else {
+      this.emit(result.code === 'step_up_required' ? 'reserve.step_up' : 'reserve.denied', {
+        root,
+        agent: verified.leaf.sub,
+        amount: req.request.amount,
+        resource: uri,
+        taskId,
+        code: result.code,
+        detail: result.detail,
+        ...(result.stepUpHandle !== undefined ? { handle: result.stepUpHandle } : {}),
+      });
+    }
 
     if (pendingNotice !== null) {
       try {
@@ -665,7 +840,7 @@ export class Ledger {
     if (!verdict.ok) return { ok: false, code: verdict.code, detail: verdict.detail };
     const claims = verdict.claims;
 
-    return this.cfg.store.transact(async (tx): Promise<StepUpDecisionResult> => {
+    const decided = await this.cfg.store.transact(async (tx): Promise<StepUpDecisionResult> => {
       const record = await tx.getStepUp(claims.handle);
       if (record === undefined) {
         return { ok: false, code: 'chain_invalid', detail: `unknown handle ${claims.handle}` };
@@ -701,6 +876,26 @@ export class Ledger {
       await tx.putStepUp(updated);
       return { ok: true, approval: updated, claims };
     });
+
+    if (decided.ok) {
+      this.emit('stepup.decided', {
+        handle: claims.handle,
+        root: decided.approval.root,
+        agent: decided.approval.agent,
+        resource: decided.approval.resource,
+        verdict: claims.verdict,
+        by: claims.iss,
+        ...(claims.reason !== undefined ? { detail: claims.reason } : {}),
+      });
+    } else {
+      this.emit('stepup.refused', {
+        handle: claims.handle,
+        by: claims.iss,
+        code: decided.code,
+        detail: decided.detail,
+      });
+    }
+    return decided;
   }
 
   /** The approval queue: what is waiting on a human, oldest first. */
@@ -803,7 +998,10 @@ export class Ledger {
     const now = this.cfg.clock();
 
     type Phase1 =
-      | { kind: 'done'; result: SettleResult }
+      // `reservation` rides along on the done paths purely so the audit event
+      // emitted after commit can carry root, agent and amount rather than a
+      // bare spendId. Absent only when there was no reservation to find.
+      | { kind: 'done'; result: SettleResult; reservation?: Reservation }
       | { kind: 'pay'; reservation: Reservation };
 
     const phase1 = await this.cfg.store.transact(async (tx): Promise<Phase1> => {
@@ -854,6 +1052,7 @@ export class Ledger {
         // Stays reserved. Sweeping is the sweep's job, not settle's.
         return {
           kind: 'done',
+          reservation: r,
           result: { ok: true, status: 'reserved', receipt: this.buildReceipt(r, 'reserved', now, input) },
         };
       }
@@ -863,6 +1062,7 @@ export class Ledger {
         await tx.putReservation(updated);
         return {
           kind: 'done',
+          reservation: updated,
           result: {
             ok: true,
             status: 'settled',
@@ -876,12 +1076,25 @@ export class Ledger {
       return { kind: 'pay', reservation: claimed };
     });
 
-    if (phase1.kind === 'done') return phase1.result;
+    if (phase1.kind === 'done') {
+      const subject =
+        phase1.reservation === undefined ? { spendId } : Ledger.subject(phase1.reservation);
+      if (phase1.result.ok) this.emit(`settle.${phase1.result.status}`, subject);
+      else {
+        this.emit('settle.refused', {
+          ...subject,
+          code: phase1.result.code,
+          detail: phase1.result.detail,
+        });
+      }
+      return phase1.result;
+    }
 
     const rail = this.cfg.rail!;
+    this.emit('settle.settling', { ...Ledger.subject(phase1.reservation), rail: rail.name });
     const paid = await rail.pay(phase1.reservation);
 
-    return this.cfg.store.transact(async (tx): Promise<SettleResult> => {
+    const settled = await this.cfg.store.transact(async (tx): Promise<SettleResult> => {
       const current = (await tx.getReservation(spendId)) ?? phase1.reservation;
 
       if (paid.ok) {
@@ -925,6 +1138,14 @@ export class Ledger {
         detail: `settlement indeterminate, awaiting reconciliation: ${paid.detail}`,
       };
     });
+
+    const subject = Ledger.subject(phase1.reservation);
+    if (settled.ok) this.emit(`settle.${settled.status}`, { ...subject, rail: rail.name });
+    // Not a failure: the rail would not say. The reservation stays debited and
+    // waits for the reconciler, and the log has to show that it is waiting
+    // rather than that it failed.
+    else this.emit('settle.indeterminate', { ...subject, rail: rail.name, detail: settled.detail });
+    return settled;
   }
 
   /**
@@ -1070,6 +1291,38 @@ export class Ledger {
     return out;
   }
 
+  /**
+   * Emit an audit event. Never inside a transaction, and never fatal.
+   *
+   * After commit, because an event describing a state change that rolled back is
+   * worse than no event — it is what makes a log untrustworthy. And swallowed,
+   * because a failing log sink must not turn a completed spend into an error the
+   * caller retries.
+   */
+  private emit(event: string, fields: Omit<AuditEvent, 'at' | 'event'> = {}): void {
+    const sink = this.cfg.audit;
+    if (sink === undefined) return;
+    try {
+      void Promise.resolve(sink.record({ at: this.cfg.clock(), event, ...fields })).catch(
+        () => undefined,
+      );
+    } catch {
+      // A sink that throws synchronously is still just a log.
+    }
+  }
+
+  /** The fields every reservation event carries, so a log can be grouped by any of them. */
+  private static subject(r: Reservation): Omit<AuditEvent, 'at' | 'event'> {
+    return {
+      spendId: r.id,
+      root: r.root,
+      agent: r.agent,
+      amount: r.amount,
+      resource: r.resource,
+      taskId: r.taskId,
+    };
+  }
+
   private applyInput(r: Reservation, input: SettleInput): Reservation {
     return {
       ...r,
@@ -1081,7 +1334,8 @@ export class Ledger {
 
   async refund(spendId: string, reason: string): Promise<SettleResult> {
     const now = this.cfg.clock();
-    return this.cfg.store.transact(async (tx): Promise<SettleResult> => {
+    let refunded: Reservation | null = null;
+    const result = await this.cfg.store.transact(async (tx): Promise<SettleResult> => {
       const r = await tx.getReservation(spendId);
       if (r === undefined) {
         return { ok: false, code: 'chain_invalid', detail: `unknown reservation ${spendId}` };
@@ -1092,8 +1346,12 @@ export class Ledger {
       await this.creditPath(tx, r);
       const updated: Reservation = { ...r, status: 'refunded', refundReason: reason };
       await tx.putReservation(updated);
+      refunded = updated;
       return { ok: true, status: 'refunded', receipt: this.buildReceipt(updated, 'refunded', now) };
     });
+
+    if (refunded !== null) this.emit('refund.ok', { ...Ledger.subject(refunded), detail: reason });
+    return result;
   }
 
   /**
@@ -1110,7 +1368,8 @@ export class Ledger {
   async sweepExpired(limit?: number): Promise<string[]> {
     const now = this.cfg.clock();
     const grace = this.cfg.reservationGraceSeconds;
-    return this.cfg.store.transact(async (tx) => {
+    let swept: Reservation[] = [];
+    const ids = await this.cfg.store.transact(async (tx) => {
       const stale = await tx.findReservations({
         status: ['reserved'],
         // Never sweep a reservation carrying a directive: the agent may have
@@ -1129,8 +1388,14 @@ export class Ledger {
           refundReason: 'spend token expired unused',
         });
       }
+      swept = stale;
       return stale.map((r) => r.id);
     });
+
+    for (const r of swept) {
+      this.emit('sweep.expired', { ...Ledger.subject(r), detail: 'spend token expired unused' });
+    }
+    return ids;
   }
 
   /** Spec §10.3 — revoking a jti kills its entire subtree on the next spend. */
@@ -1174,7 +1439,7 @@ export class Ledger {
     if (!verdict.ok) return { ok: false, code: verdict.code, detail: verdict.detail };
     const claims = verdict.claims;
 
-    return this.cfg.store.transact(async (tx): Promise<ControlResult> => {
+    const applied = await this.cfg.store.transact(async (tx): Promise<ControlResult> => {
       if (!(await tx.consumeNonce(claims.jti, claims.exp))) {
         return { ok: false, code: 'token_replayed', detail: `decision ${claims.jti} already used` };
       }
@@ -1213,6 +1478,18 @@ export class Ledger {
       await tx.setKilled(claims.root, claims.action === 'kill');
       return { ok: true, action: claims.action, root: claims.root };
     });
+
+    // Always logged, including the refusals. Somebody trying and failing to halt
+    // a principal is exactly the thing an incident review needs to see.
+    this.emit(applied.ok ? `control.${applied.action}` : 'control.refused', {
+      root: claims.root,
+      by: claims.iss,
+      action: claims.action,
+      ...(claims.target !== undefined ? { target: claims.target } : {}),
+      ...(applied.ok ? {} : { code: applied.code, detail: applied.detail }),
+      ...(claims.reason !== undefined ? { reason: claims.reason } : {}),
+    });
+    return applied;
   }
 
   /**
@@ -1329,12 +1606,19 @@ export class Ledger {
    */
   async escalate(spendId: string, reason: string): Promise<boolean> {
     const now = this.cfg.clock();
-    return this.cfg.store.transact(async (tx) => {
+    let escalated: Reservation | null = null;
+    const raised = await this.cfg.store.transact(async (tx) => {
       const r = await tx.getReservation(spendId);
       if (r === undefined || r.escalated !== undefined) return false;
       await tx.putReservation({ ...r, escalated: { at: now, reason } });
+      escalated = r;
       return true;
     });
+
+    if (escalated !== null) {
+      this.emit('escalated', { ...Ledger.subject(escalated), detail: reason });
+    }
+    return raised;
   }
 
   /**

@@ -1,4 +1,5 @@
 import type {
+  IdempotencyRecord,
   MandateNode,
   Reservation,
   ReservationQuery,
@@ -193,6 +194,29 @@ export function stepUpWhere(
   if (q.notExpiredAt !== undefined) clauses.push(`expires_at >= ${bind(q.notExpiredAt)}`);
 
   return { sql: clauses.length === 0 ? '1 = 1' : clauses.join(' AND '), params };
+}
+
+export function idempotentToRow(rec: IdempotencyRecord): Row {
+  return {
+    key: rec.key,
+    request_hash: rec.requestHash,
+    // The recorded response is stored whole. It contains a minted spend token
+    // and a BigInt or two, and a replay has to return the same answer byte for
+    // byte or it is not idempotent.
+    response: encodeJson(rec.response),
+    created_at: rec.createdAt,
+    expires_at: rec.expiresAt,
+  };
+}
+
+export function rowToIdempotent(r: Row): IdempotencyRecord {
+  return {
+    key: r['key'] as string,
+    requestHash: r['request_hash'] as string,
+    response: decodeJson(r['response'] as string),
+    createdAt: num(r['created_at']),
+    expiresAt: num(r['expires_at']),
+  };
 }
 
 export function rowToSpendEvent(r: Row): SpendEvent {

@@ -49,6 +49,8 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/stepup.ts`](src/stepup.ts) | §10.5 — decisions signed by the principal, terms restated inside the signature |
 | [`src/control.ts`](src/control.ts) | §10.6 — signed kill / release / revoke, with a one-time nonce |
 | [`src/http/approval.ts`](src/http/approval.ts) | The approval queue and approve/deny, framework-agnostic |
+| [`src/http/service.ts`](src/http/service.ts) | §1.2 — the ledger as a service: mint, settle, refund, control, metrics |
+| [`src/http/serve.ts`](src/http/serve.ts) | `node:http` binding, so the handlers are a daemon rather than a library |
 | [`src/http/console.ts`](src/http/console.ts) | §5.2 — the principal console: budget tree, spend feed, kill switch |
 | [`src/mcp/gateway.ts`](src/mcp/gateway.ts) | MCP mandate gateway — a mandate per tool call, wrapped server unmodified |
 | [`src/mcp/jsonrpc.ts`](src/mcp/jsonrpc.ts) | JSON-RPC 2.0 and the stdio framer, hand-rolled |
@@ -168,6 +170,41 @@ The agent then retries and the spend goes through, once. Presenting the handle
 without a decision does not work, and a decision signed by anything other than a
 trusted root issuer does not verify — which matters, because the ledger hands
 that handle to the agent.
+
+### Running the ledger as a service
+
+```ts
+import { LedgerService, ApprovalService, ConsoleService, serve } from './src/index.js';
+
+serve({
+  port: 8787,
+  handlers: [
+    new LedgerService({
+      ledger,
+      basePath: '/ledger',
+      // §7 step 9: supply the key thumbprint your transport already verified.
+      resolvePresenter: (req) => verifiedJktFrom(req),
+    }),
+    new ApprovalService({ ledger, basePath: '/step-ups' }),
+    new ConsoleService({ ledger, basePath: '/console' }),
+  ],
+});
+```
+
+`POST /ledger/v1/mint` requires an `Idempotency-Key`, and the key is claimed
+**inside the same transaction as the debit** — so a client that retries because a
+response was slow is not charged twice, and two concurrent requests carrying the
+same key produce one reservation. A key reused with a *different* request is
+refused rather than answered with the earlier result.
+
+`GET /ledger/metrics` exposes `am_settling_outstanding`. That is the number to
+page on: reservations in `settling` are money that is neither spent nor
+available, and the count trending upward means a rail has stopped answering.
+
+Pass an `audit` sink to the `Ledger` for a structured log of every state
+transition, keyed by `spendId`. It belongs on the ledger rather than the service
+because the transitions that matter most are the ones the reconciler makes with
+no request to attribute them to.
 
 ### The principal console
 

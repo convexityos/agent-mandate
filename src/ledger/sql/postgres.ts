@@ -20,6 +20,8 @@ import {
   rowToNode,
   rowToReservation,
   rowToSpendEvent,
+  idempotentToRow,
+  rowToIdempotent,
   rowToStepUp,
   stepUpToRow,
   stepUpWhere,
@@ -198,6 +200,14 @@ CREATE TABLE IF NOT EXISTS nonce (
   expires_at BIGINT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS idempotency (
+  key          TEXT PRIMARY KEY,
+  request_hash TEXT NOT NULL,
+  response     TEXT NOT NULL,
+  created_at   BIGINT NOT NULL,
+  expires_at   BIGINT NOT NULL
+);
+
 -- CREATE TABLE IF NOT EXISTS is not a migration: it silently does nothing to a
 -- table that already exists, so a deployment created before the §10.5 columns
 -- landed would fail on the first step-up write with "column state does not
@@ -228,6 +238,7 @@ export const TABLES = [
   'step_up',
   'kill_switch',
   'nonce',
+  'idempotency',
 ] as const;
 
 export class PostgresStore implements LedgerStore {
@@ -383,6 +394,40 @@ export class PostgresStore implements LedgerStore {
           [nonce, expiresAt],
         );
         return rows.length > 0;
+      },
+
+      /**
+       * Locked by key, not by row, for exactly the reason `lockNode` is: the
+       * case that matters is two concurrent *first* uses of one idempotency
+       * key, where there is no row for `FOR UPDATE` to lock and both callers
+       * would proceed to debit.
+       */
+      getIdempotent: async (key) => {
+        if (locking) {
+          await c.query('SELECT pg_advisory_xact_lock($1::bigint)', [
+            advisoryKey(`idempotency:${key}`),
+          ]);
+        }
+        const { rows } = await c.query(
+          'SELECT * FROM idempotency WHERE key = $1 AND expires_at >= $2',
+          [key, this.clock()],
+        );
+        return rows[0] === undefined ? undefined : rowToIdempotent(rows[0]);
+      },
+
+      putIdempotent: async (record) => {
+        await c.query('DELETE FROM idempotency WHERE expires_at < $1', [this.clock()]);
+        const r = idempotentToRow(record);
+        await c.query(
+          `INSERT INTO idempotency (key, request_hash, response, created_at, expires_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (key) DO UPDATE SET
+             request_hash = EXCLUDED.request_hash,
+             response = EXCLUDED.response,
+             created_at = EXCLUDED.created_at,
+             expires_at = EXCLUDED.expires_at`,
+          [r['key'], r['request_hash'], r['response'], r['created_at'], r['expires_at']],
+        );
       },
 
       getReservation: async (id) => {

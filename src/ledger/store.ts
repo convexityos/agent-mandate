@@ -135,6 +135,34 @@ export interface StepUpApproval {
   decision?: StepUpDecisionRecord;
 }
 
+/**
+ * §9 — a mint that has already been answered.
+ *
+ * A retried mint that debits twice is the whole failure class this project
+ * exists to prevent, and a retry is not exotic: it is what every HTTP client
+ * does when a response is slow.
+ *
+ * The record is claimed and completed **inside the same transaction as the
+ * debit**, not around it. Claiming first and debiting after is the dual-write
+ * problem one layer up — a crash between the two either strands the key, so the
+ * caller can never learn the outcome, or leaves it unclaimed, so the retry
+ * debits again.
+ */
+export interface IdempotencyRecord {
+  key: string;
+  /**
+   * Hash of the request this key was first used for. A key replayed with a
+   * different request is a client bug and is refused rather than answered with
+   * the wrong result — silently returning the first response would be worse
+   * than either debiting or failing.
+   */
+  requestHash: string;
+  /** The recorded response, replayed verbatim. */
+  response: unknown;
+  createdAt: number;
+  expiresAt: number;
+}
+
 /** Selects step-ups for an approval queue. */
 export interface StepUpQuery {
   state?: StepUpState[];
@@ -208,6 +236,15 @@ export interface LedgerTx {
    * halted principal is quite likely to involve.
    */
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
+
+  /**
+   * §9 idempotency. Inside `transact` this MUST take whatever lock makes a
+   * subsequent `putIdempotent` for the same key safe — including when the row
+   * does not exist yet, which is the case that matters: two concurrent first
+   * uses of one key must not both proceed to debit.
+   */
+  getIdempotent(key: string): Promise<IdempotencyRecord | undefined>;
+  putIdempotent(record: IdempotencyRecord): Promise<void>;
 
   getReservation(id: string): Promise<Reservation | undefined>;
   putReservation(r: Reservation): Promise<void>;
@@ -301,6 +338,7 @@ export class MemoryLedgerStore implements LedgerStore {
   private readonly stepUps = new Map<string, StepUpApproval>();
   private readonly kills = new Set<string>();
   private readonly nonces = new Map<string, number>();
+  private readonly idempotency = new Map<string, IdempotencyRecord>();
 
   /**
    * Serialization via a promise chain. Node is single-threaded, but `reserve`
@@ -357,6 +395,20 @@ export class MemoryLedgerStore implements LedgerStore {
       this.undo(this.nonces, nonce);
       this.nonces.set(nonce, expiresAt);
       return true;
+    },
+
+    getIdempotent: async (key) => {
+      const rec = this.idempotency.get(key);
+      if (rec === undefined) return undefined;
+      if (rec.expiresAt < this.clock()) {
+        this.idempotency.delete(key);
+        return undefined;
+      }
+      return rec;
+    },
+    putIdempotent: async (record) => {
+      this.undo(this.idempotency, record.key);
+      this.idempotency.set(record.key, record);
     },
 
     getReservation: async (id) => this.reservations.get(id),
