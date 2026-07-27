@@ -26,7 +26,7 @@ ordering below rather than for any particular item in it.
 | Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler, HTTP service | — |
 | Revocation | §10.3 online, signed bitstring status lists for offline, merchant cache, pre-materialization revoke | — |
 | Offline mode | §13 profile enforced as one check against the fold; per-merchant, per-currency risk budget | tracking live grants is the deployment's |
-| Threat model | 56-entry catalogue, every citation resolved against the suite, gaps stated | — |
+| Threat model | 57-entry catalogue, every citation resolved against the suite, gaps stated | — |
 | Settlement | custodial + non-custodial x402, card/ACH-shaped rail, EIP-712/3009, `authorizationState` | escrow (deliberately — see triage) |
 | Transport | §14 binding, merchant verifier, agent client, `mandatedFetch` | — |
 | Agents | signer, directive execution, MCP mandate gateway, PreToolUse/PostToolUse hook | — |
@@ -423,7 +423,7 @@ the migration check the last schema change did not get until it broke.
 ### 3.3 Threat catalogue — **done**
 
 [`threats/README.md`](threats/README.md), generated from
-[`test/threats.build.ts`](test/threats.build.ts). 56 entries, one per attack, in
+[`test/threats.build.ts`](test/threats.build.ts). 57 entries, one per attack, in
 the format the `jti` re-issue and replay-ordering findings suggested: **the
 attack, why it works against the obvious implementation, the check, and the test
 that proves the check runs.**
@@ -619,6 +619,21 @@ This is a property of a deployment, not of a chain, so it is pinned by tests —
 including one that spends a mandate to zero at the ledger it names and then
 presents it to a second, which is the finding stated as money rather than as an
 error code.
+
+It is catalogue entry `multi-ledger-budget-multiplication` (§3.3), and writing
+that entry is what surfaced the half of it that is **not** fixed. The catalogue
+asks every entry to name a gap or cite a test, and the honest answer here is
+both. `Merchant.handle` makes the mirror-image check online; the §13 offline path
+does not make it at all. `checkOfflineProfile` takes the effective caveats and
+the window, and `verifyChain` holds no ledger identity — so a merchant settling
+with ledger A can accept a chain naming ledger B, report the consumption to A,
+and have A record nothing against a root it has never heard of. The mandate is
+spendable offline without ever debiting the ledger that issued it.
+
+That is the same attack pointed one layer out, and closing it means deciding
+whether `verifyChain` should take the relying party's own ledger URL. Which is a
+signature change to the §7 function rather than a missing line, and is the reason
+it is written down here rather than guessed at.
 
 ## Recommended sequence
 

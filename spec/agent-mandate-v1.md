@@ -1462,6 +1462,7 @@ still valid.
 | Overdraw on a mandate's first concurrent spends | Nodes locked by key, not by row — a row that does not exist locks nothing (§10.1) | `first-spend-overdraw` |
 | Deadlock as a denial of service | Path rows locked root-to-leaf, always (§10.1) | `lock-order-deadlock` |
 | Sibling collusion | Path-walk debit makes joint spend bounded by the common ancestor (§10.1) | `sibling-collusion` |
+| Spending one mandate at every ledger | Links agreeing on `ledger` binds nothing; the serving Ledger must also be the named one (§7 step 3) | `multi-ledger-budget-multiplication` |
 | Retry-storm griefing | `rate` caveat enforced at every ancestor + burn-rate breaker (§10.4) | `retry-storm-griefing` |
 | Refunds used to reset a rate limit | A refund credits budget and **not** the rate counter (§10.2) | `refund-inflates-rate` |
 | Agent approving its own step-up | The handle records a question; the approval is a separate signed answer (§10.5) | `step-up-self-approval` |
