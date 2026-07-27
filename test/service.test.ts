@@ -141,6 +141,36 @@ describe('idempotent mint', () => {
     expect(await remaining()).toBe(toScaled(usd('9.00')));
   });
 
+  it('does not collide two requests that differ only above U+00FF', async () => {
+    // Node's `'ascii'` encoding is latin1-equivalent on encode: it truncates
+    // code points above U+00FF modulo 256, so `Ł` (U+0141) becomes byte 0x41 —
+    // which is `A`. Hash the request with it and `/Łedger` and `/Aedger` are the
+    // same key, so the second caller is handed the first caller's spend token,
+    // minted for a resource they never asked for.
+    //
+    // The JWS hash beside it may legitimately use `'ascii'`, because base64url
+    // is ASCII by construction. That is exactly why the wrong one is easy to
+    // copy, and why this is pinned rather than left to the comment.
+    const withResource = (resource: string) =>
+      service().handle({
+        method: 'POST',
+        path: '/ledger/v1/mint',
+        headers: { 'idempotency-key': 'collide' },
+        body: { tokens: chain(), request: { resource, amount: usd('1.00'), taskId: 'tsk_01' } },
+      });
+
+    const first = await withResource(`https://${HOST}/v3/forecast/Łedger`);
+    expect(first.status).toBe(201);
+
+    const second = await withResource(`https://${HOST}/v3/forecast/Aedger`);
+    // Refused as a different request, rather than replayed as the same one.
+    expect(second.status).toBe(400);
+    expect((second.body as { detail: string }).detail).toContain('different request');
+    // Spelled out, because this is the consequence rather than the mechanism:
+    // under `'ascii'` the second caller receives the first caller's reservation.
+    expect((second.body as { spendId?: string }).spendId).toBeUndefined();
+  });
+
   it('replays a refusal rather than re-deciding it', async () => {
     const svc = service();
     // Over max_per_txn, so this is refused on the merits.

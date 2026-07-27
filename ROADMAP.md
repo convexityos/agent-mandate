@@ -25,6 +25,8 @@ ordering below rather than for any particular item in it.
 | Verification | §7 chain verification against the accumulated meet, 52 published conformance vectors | — |
 | Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler, HTTP service | — |
 | Revocation | §10.3 online, signed bitstring status lists for offline, merchant cache, pre-materialization revoke | — |
+| Offline mode | §13 profile enforced as one check against the fold; per-merchant, per-currency risk budget | tracking live grants is the deployment's |
+| Threat model | 56-entry catalogue, every citation resolved against the suite, gaps stated | — |
 | Settlement | custodial + non-custodial x402, card/ACH-shaped rail, EIP-712/3009, `authorizationState` | escrow (deliberately — see triage) |
 | Transport | §14 binding, merchant verifier, agent client, `mandatedFetch` | — |
 | Agents | signer, directive execution, MCP mandate gateway, PreToolUse/PostToolUse hook | — |
@@ -418,11 +420,59 @@ real HTTP — register, revoke, publish, refuse — and both stores were verifie
 against a database created *before* the new column and table existed, which is
 the migration check the last schema change did not get until it broke.
 
-### 3.3 Threat catalog
+### 3.3 Threat catalogue — **done**
 
-§16 is prose. The `jti` re-issue finding and the replay-ordering finding show the
-format that actually works: the attack, why it succeeds, the check that stops it,
-the test that proves the check. One entry per attack, each with a test id.
+[`threats/README.md`](threats/README.md), generated from
+[`test/threats.build.ts`](test/threats.build.ts). 56 entries, one per attack, in
+the format the `jti` re-issue and replay-ordering findings suggested: **the
+attack, why it works against the obvious implementation, the check, and the test
+that proves the check runs.**
+
+The middle field is the one worth having and the one §16 could not carry.
+Knowing that a `jti` must be bound to its JWS hash is much less use than knowing
+that, without the binding, an issuer re-signs a spent `jti` with a fresh
+`max_total` and the counter resets with every signature still valid.
+
+**The test ids are checked mechanically.** [`threats.test.ts`](test/threats.test.ts)
+parses every `it(...)` title in the suite and resolves each citation against it;
+rename a cited test and the build fails. §16 became the index, every row carrying
+its entry id, and the check runs both ways — a row with no entry fails, an entry
+with no row fails, and the two disagreeing about what an attack is *called*
+fails. Verified by renaming a test and deleting a row and watching each break.
+
+That matters here specifically. A security table's failure mode is that a row can
+claim a mitigation nothing enforces and read exactly the same either way — and
+three of the four most valuable findings in this project were mitigations that
+existed and did not work. An entry that cannot cite a test carries a `gap`
+instead, and the gaps are rendered first rather than buried.
+
+**Writing it found two things, which is the point of writing it.**
+
+- **The `'ascii'` hash truncation had no test.** The comment in `ledger.ts`
+  explains at length that `Ł` (U+0141) encodes to byte 0x41 — `A` — so `/Łedger`
+  and `/Aedger` hash identically and the second caller is handed the first's
+  reservation. The fix was there; nothing pinned it. Reverting the encoding now
+  fails a test that shows the second caller receiving a **201** carrying someone
+  else's spend token.
+- **Nothing enforced the §13 offline profile.** Its five constraints were each
+  individually expressible as caveats and no code held a mandate to all of them
+  at once — so the bound §13 claims did not exist. [`src/offline.ts`](src/offline.ts)
+  is `verifyChain({ offline: true })` plus `offlineRiskBudget`, the figure §13
+  says implementations **MUST** surface to the principal.
+
+  Three things that only became clear building it: the constraints are
+  **conjunctive** — a one-hour window with a wildcard `aud` bounds nothing,
+  because "the sum over merchants named" is unbounded when one mandate names them
+  all — so it is one check rather than four a caller might apply three of. The
+  check runs against the **fold**, because a root that wildcards and a leaf that
+  narrows is fine and the reverse is not. And `settle` is the one place absence
+  being ⊤ is the wrong answer: ⊤ includes escrow, and escrow needs the Ledger,
+  which is the one thing an offline merchant does not have.
+
+Four gaps remain and are stated rather than engineered around: an agent holding
+its own key can always bypass a non-custodial ledger, a client can route around
+the MCP gateway, ledger compromise is total, and offline loss is bounded rather
+than prevented. Each says what is missing in its own entry.
 
 ---
 
@@ -583,11 +633,10 @@ a spend that needed a human was the first thing to walk straight through.
 All three exist, and §1.3 and §5.2 with them. §5 is closed: the principal is no
 longer the only party in the protocol without an interface.
 
-**Sections 1 and 2 are complete, and §3.2 with them.** What is left is §3.3, the
-threat catalogue — which now has a conformance suite to point its entries at, and
-a §16 table that grew five rows building the status list. After that the open
-questions in §4 that were marked *build* — quote binding, AP2/ACP interop, and
-salted-hash paths in receipts.
+**Sections 1, 2 and 3 are complete.** What is left is the open questions in §4
+that were marked *build* — quote binding, AP2/ACP interop, and salted-hash paths
+in receipts — and, from §3.3's own findings, wiring a deployment that actually
+tracks live offline grants so the risk budget has something to sum.
 
 One thing an earlier pass exposed that is not on the list anywhere: **there is no
 migration story.** `CREATE TABLE IF NOT EXISTS` does nothing to a table that

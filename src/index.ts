@@ -10,6 +10,7 @@ export * from './sign.js';
 export * from './verify.js';
 export * from './spend.js';
 export * from './status.js';
+export * from './offline.js';
 export * from './receipt.js';
 export * from './stepup.js';
 export * from './control.js';
