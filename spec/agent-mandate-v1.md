@@ -1253,10 +1253,29 @@ the Ledger:
 5. The merchant reports consumption to the Ledger asynchronously, at least every 60
    seconds.
 
+**The five are conjunctive and a verifier MUST apply them as one check**, against
+the *effective* authority rather than any single link. Each is load-bearing only
+alongside the others: a one-hour window with a wildcard `aud` bounds nothing,
+because "the sum over merchants named in live offline mandates" is unbounded when
+one mandate names them all; a single host with no `max_total` bounds nothing
+either. A verifier that offers the four credential-side constraints separately
+invites a deployment to apply three of them. Constraint 5 is a property of a
+running deployment rather than of a credential, and cannot be checked from the
+chain.
+
+A chain that fails the profile is **not invalid** — presented online it is fine.
+The refusal is about the mode, and is reported as `offline_profile_violated`
+(§15).
+
 Worst-case loss from parallel presentation is bounded by the sum of per-merchant
 offline `max_total` values across all merchants named in live offline mandates.
 Implementations **MUST** surface this figure to the principal as a configured risk
-budget rather than leaving it implicit.
+budget rather than leaving it implicit. It is reported per merchant **and per
+currency**: summing across currencies would require a rate, and nothing else in
+this protocol invents one. Consumption already reported to the Ledger is **not**
+netted off — the exposure is what a mandate could still spend at a merchant that
+has not reported, and what the Ledger already knows about is precisely the part
+not at risk of being counted twice.
 
 Revocation in offline mode is bounded only by `exp` unless the merchant consults
 a status list (§10.3.1), which replaces that bound with the list's own lifetime.
@@ -1363,6 +1382,7 @@ Returned as `application/problem+json` (RFC 9457) with `type`
 | `mandate_expired` | 403 | Outside the effective validity window |
 | `mandate_revoked` | 403 | A link in the path is revoked |
 | `status_unknown` | 503 | A link claims a status list entry that could not be checked (§10.3.1) |
+| `offline_profile_violated` | 403 | Valid, but not settleable without the Ledger (§13) |
 | `pop_failed` | 401 | Request signature does not match `cnf.jkt` |
 | `resource_not_covered` | 403 | Resource outside `resources` |
 | `audience_mismatch` | 403 | Host outside `aud`, or token `aud` ≠ merchant |
@@ -1381,36 +1401,75 @@ Returned as `application/problem+json` (RFC 9457) with `type`
 
 ## 16. Security considerations
 
-| Attack | Mitigation |
-|---|---|
-| Unknown-caveat bypass | Registry pinned by `v`; unrecognized key rejects the chain (§6.3) |
-| Stolen mandate replayed | `cnf` PoP binding at every link (§5.2) |
-| Confused deputy | `purpose` caveat + `task_id` bound into the presentation signature (§8) |
-| Pattern widening via encoding | Canonicalize before compare; restricted grammar, no regex (§6.4) |
-| Algorithm confusion | Static `alg` allowlist; `alg` never selects the key (§4.1) |
-| Spend-token replay | `jti` cache, 60s expiry, `aud`-bound, signature covers `Payment` header |
-| Replay-cache poisoning | Replay check runs *after* signature and audience (§9.2), so a forged token cannot burn a real `jti` |
-| Signature covering nothing useful | Merchant checks the declared covered-component list contains `@method`, `@target-uri`, `payment` (§14.2) |
-| Token lifted to a pricier endpoint | Merchant checks `token.res` against the canonical request URI (§14.5) |
-| `jti` re-issue to reset a budget | Ledger binds each `jti` to its JWS hash at materialization (§10.1) |
-| Deadlock as a denial of service | Path rows locked root-to-leaf, always (§10.1) |
-| Free service via precision truncation | Amounts below the rail's asset precision are a terminal failure, never rounded (§12.2.4) |
-| Double transfer after a crash | Rail idempotency key derived from the spend `jti` (§12.2.2) |
-| Refund-on-timeout draining a principal | Indeterminate settlements wait in `settling` for reconciliation (§12.2.1) |
-| Agent redirects a non-custodial payment | Directive pins every transfer field; `directive_hash` is compared on report (§12.4.3, §12.4.6) |
-| Agent falsely reports payment | Settlement confirmed by chain read, never by the report (§12.4.5) |
-| Agent bypasses the Ledger entirely | **Not preventable non-custodially.** Detected by payer-account reconciliation (§12.4.7) |
-| Cross-merchant parallel spend | Online: Ledger is authoritative. Offline: per-merchant caps bound loss (§13) |
-| Status-list rollback un-revoking a mandate | Consumer refuses any `seq` below one already held for that `sub` (§10.3.1) |
-| Status list pinned to hide a revocation | `exp` is mandatory and a stale list is refused rather than served (§10.3.1) |
-| Status list as a decompression bomb | Signature verified before `gunzip`; declared `bits` caps the inflated size (§10.3.1) |
-| Blocking the status fetch to bypass the check | A chain carrying `st` that cannot be checked is refused, not admitted (§10.3.1) |
-| Spending a mandate revoked before its first use | Revocation is recorded independently of materialization and inherited by the node (§10.3) |
-| Key compromise at depth *n* | Blast radius limited to that subtree's caveats; short `exp` + subtree revoke |
-| Retry-storm griefing | `rate` caveat enforced at every ancestor + burn-rate breaker (§10.4) |
-| Clock skew abuse | ±60s hard tolerance; Ledger clock authoritative online (§4.5) |
-| Sibling collusion | Path-walk debit makes joint spend bounded by the common ancestor (§10.1) |
-| Ledger compromise | Full compromise of the principal's funds. Ledger keys **MUST** be in an HSM; receipts are dual-signed so merchant records provide independent reconstruction. |
+This table is the index. Each row names a catalogue entry giving the attack, **why
+it works against the obvious implementation**, the check, and the test that proves
+the check runs — the reference implementation keeps that catalogue in
+`threats/`, and every row here must have one.
+
+The middle column is what a two-column table cannot carry and what an
+implementer most needs. Knowing that a `jti` must be bound to its JWS hash is
+much less use than knowing that, without the binding, an issuer can re-sign a
+spent `jti` with a fresh `max_total` and reset the counter with every signature
+still valid.
+
+| Attack | Mitigation | Entry |
+|---|---|---|
+| Unknown-caveat bypass | Registry pinned by `v`; unrecognized key rejects the chain (§6.3) | `unknown-caveat-bypass` |
+| Grandchild escape past an omitted caveat | Each link compared against the accumulated meet, not its parent (§7) | `grandchild-escape` |
+| Widening by omitting a caveat | Effective authority is the meet of the whole chain; post-condition re-checks the fold (§7) | `omitted-caveat-widening` |
+| Injecting an unrecognized top-level claim | Unknown claims reject the chain, as unknown caveats do (§5.1) | `claim-injection` |
+| Cross-currency comparison | A typed failure, never a boolean; no conversion is implied (§6.2) | `cross-currency-comparison` |
+| Stolen mandate replayed | `cnf` PoP binding at every link (§5.2) | `stolen-mandate-replayed` |
+| Forging or editing a link | Link *i* must be signed by link *i−1*'s `sub`; only the root is checked against the trust set (§7) | `forged-link` |
+| Confused deputy | `purpose` caveat + `task_id` bound into the presentation signature (§8) | `confused-deputy` |
+| Pattern widening via encoding | Canonicalize before compare; restricted grammar, no regex (§6.4) | `pattern-widening-via-encoding` |
+| Algorithm confusion | Static `alg` allowlist; `alg` never selects the key (§4.1) | `algorithm-confusion` |
+| Delegating deeper than granted | `depth` is a counter; omission inherits rather than resetting (§7) | `depth-escape` |
+| Spend-token replay | `jti` cache at 2× the token lifetime, `aud`-bound, signature covers `Payment` (§9.2) | `spend-token-replay` |
+| Replay-cache poisoning | Replay check runs *after* signature and audience (§9.2), so a forged token cannot burn a real `jti` | `replay-cache-poisoning` |
+| Signature covering nothing useful | Merchant checks the declared covered-component list contains `@method`, `@target-uri`, `payment` (§14.2) | `signature-covering-nothing` |
+| Token lifted to a pricier endpoint | Merchant checks `token.res` against the canonical request URI (§14.5) | `token-lifted-to-pricier-endpoint` |
+| Merchant learns the delegation tree | Merchant sees `chain_hash`, never the chain (§9.1) | `mandate-disclosure-to-merchant` |
+| `jti` re-issue to reset a budget | Ledger binds each `jti` to its JWS hash at materialization (§10.1) | `jti-reissue-budget-reset` |
+| Overdraw on a mandate's first concurrent spends | Nodes locked by key, not by row — a row that does not exist locks nothing (§10.1) | `first-spend-overdraw` |
+| Deadlock as a denial of service | Path rows locked root-to-leaf, always (§10.1) | `lock-order-deadlock` |
+| Sibling collusion | Path-walk debit makes joint spend bounded by the common ancestor (§10.1) | `sibling-collusion` |
+| Retry-storm griefing | `rate` caveat enforced at every ancestor + burn-rate breaker (§10.4) | `retry-storm-griefing` |
+| Refunds used to reset a rate limit | A refund credits budget and **not** the rate counter (§10.2) | `refund-inflates-rate` |
+| Agent approving its own step-up | The handle records a question; the approval is a separate signed answer (§10.5) | `step-up-self-approval` |
+| Redirecting a signed step-up decision | Terms are restated inside the signature and re-checked against the record (§10.5) | `step-up-decision-redirected` |
+| Replaying a captured `release` | Durable one-time `jti`, consumed in the transaction that applies the action (§10.6) | `control-action-replay` |
+| One principal halting another | Checked against the root node's recorded issuer, not merely the trust list (§10.6) | `cross-principal-control` |
+| Using the control endpoint from the agent's network | The decision carries its own authority, so reaching the endpoint is not using it (§10.6) | `agent-approves-via-unauthenticated-endpoint` |
+| Spending a mandate revoked before its first use | Revocation is recorded independently of materialization and inherited by the node (§10.3) | `revoke-before-first-spend` |
+| Status-list rollback un-revoking a mandate | Consumer refuses any `seq` below one already held for that `sub` (§10.3.1) | `status-list-rollback` |
+| Status list pinned to hide a revocation | `exp` is mandatory and a stale list is refused rather than served (§10.3.1) | `status-list-pinned` |
+| Status list as a decompression bomb | Signature verified before `gunzip`; declared `bits` caps the inflated size (§10.3.1) | `status-list-decompression-bomb` |
+| Blocking the status fetch to bypass the check | A chain carrying `st` that cannot be checked is refused, not admitted (§10.3.1) | `status-fetch-blocked` |
+| Pointing a status list at a host the issuer controls | The list URI is derived from the chain, never declared (§10.3.1) | `status-uri-redirection` |
+| Two mandates sharing a status index | The list is the union of revoked indices; a collision cannot clear a bit (§10.3.1) | `status-index-collision` |
+| Idempotency key reused for a different request | Refused, never answered with the earlier result (§9) | `idempotency-key-substitution` |
+| Idempotency hash collision via encoding | Request hashed over UTF-8; `ascii` truncates above U+00FF (§9) | `idempotency-hash-collision-via-encoding` |
+| Double transfer after a crash | Rail idempotency key derived from the spend `jti` (§12.2.2) | `double-transfer-after-crash` |
+| Refund-on-timeout draining a principal | Indeterminate settlements wait in `settling` for reconciliation (§12.2.1) | `refund-on-timeout-drain` |
+| Refunding a failed irreversible call, then retrying it | Refund by `effect`, not by outcome — a failed write settles (§12.2.1) | `failed-call-refund-retry` |
+| Free service via precision truncation | Amounts below the rail's asset precision are a terminal failure, never rounded (§12.2.4) | `precision-truncation-free-service` |
+| Releasing escrow without a verdict | `escrow_schema` will not settle without one; `escrow_human` holds (§12.3) | `escrow-release-without-verdict` |
+| Settling one reservation twice | Settlement claims the reservation inside the transaction that reads it (§12.2) | `double-settle` |
+| Agent redirects a non-custodial payment | Directive pins every transfer field; `directive_hash` is compared on report (§12.4.3, §12.4.6) | `directive-redirection` |
+| Agent falsely reports payment | Settlement confirmed by chain read, never by the report (§12.4.5) | `false-payment-report` |
+| Nonce reused for a different transfer | Nonce derived from the spend `jti`; a differing intent is refused (§12.4.3) | `nonce-reuse-for-a-different-transfer` |
+| Exfiltrating the agent signing key | Key held in a closure, redacted from JSON, `inspect` and every refusal path (§12.4.4) | `signer-key-exfiltration` |
+| Agent bypasses the Ledger entirely | **Not preventable non-custodially.** Detected by payer-account reconciliation (§12.4.7) | `agent-bypasses-the-ledger` |
+| Treating a rail as more decidable than it is | Rails declare capabilities; undecidable settlements escalate rather than refund (§12.4.5) | `rail-guarantee-overclaim` |
+| Cross-merchant parallel spend | Online: Ledger is authoritative. Offline: per-merchant caps bound loss (§13) | `cross-merchant-parallel-spend` |
+| Calling a tool the enforcement layer cannot price | The gateway refuses what it cannot price, and never lists it (§6.2) | `unpriced-tool-through-the-gateway` |
+| Reaching the upstream server without the gateway | **Not preventable at this layer.** The gateway constrains a channel, not an agent | `routing-around-the-gateway` |
+| Ledger outage as unmetered spending | The enforcement layer denies by default when the Ledger is unreachable | `ledger-outage-as-unmetered-spending` |
+| A refusal mistaken for a transport error | Refusals are responses carrying the §15 code, not exceptions (§15) | `refusal-mistaken-for-a-transport-error` |
+| Key compromise at depth *n* | Blast radius limited to that subtree's caveats; short `exp` + subtree revoke (§5.2) | `key-compromise-at-depth` |
+| Clock skew abuse | ±60s hard tolerance; Ledger clock authoritative online (§4.5) | `clock-skew-abuse` |
+| Ledger compromise | Full compromise of the principal's funds. Ledger keys **MUST** be in an HSM; receipts are dual-signed so merchant records provide independent reconstruction. | `ledger-compromise` |
 
 **Residual risk worth stating plainly.** The Ledger is a single point of both
 failure and trust. Availability failure blocks all online spending; key compromise

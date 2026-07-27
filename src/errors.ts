@@ -11,6 +11,7 @@ export type ErrorCode =
   | 'mandate_expired'
   | 'mandate_revoked'
   | 'status_unknown'
+  | 'offline_profile_violated'
   | 'pop_failed'
   | 'resource_not_covered'
   | 'audience_mismatch'
@@ -38,6 +39,10 @@ export const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   // stop presenting a chain that is very likely fine, and hides a status-list
   // outage inside a wall of ordinary refusals.
   status_unknown: 503,
+  // 403: the chain is perfectly valid, it simply may not be settled without the
+  // Ledger. The same credential presented online is fine, so this is a refusal
+  // about the *mode* rather than about the mandate.
+  offline_profile_violated: 403,
   pop_failed: 401,
   resource_not_covered: 403,
   audience_mismatch: 403,

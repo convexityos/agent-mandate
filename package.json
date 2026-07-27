@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "vectors": "npm run build && node dist/test/vectors.emit.js",
-    "am": "npm run build --silent && node bin/am.mjs"
+    "am": "npm run build --silent && node bin/am.mjs",
+    "threats": "npm run build && node dist/test/threats.emit.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

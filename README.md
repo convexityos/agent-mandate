@@ -51,6 +51,8 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/stepup.ts`](src/stepup.ts) | §10.5 — decisions signed by the principal, terms restated inside the signature |
 | [`src/control.ts`](src/control.ts) | §10.6 — signed kill / release / revoke, with a one-time nonce |
 | [`src/status.ts`](src/status.ts) | §10.3.1 — signed bitstring status lists, and the merchant-side cache |
+| [`src/offline.ts`](src/offline.ts) | §13 — the offline profile as one check, and the risk budget it obliges you to show |
+| [`test/threats.build.ts`](test/threats.build.ts) | §3.3 — the threat catalogue, rendered to [`threats/`](threats/README.md) |
 | [`src/http/approval.ts`](src/http/approval.ts) | The approval queue and approve/deny, framework-agnostic |
 | [`src/http/service.ts`](src/http/service.ts) | §1.2 — the ledger as a service: mint, settle, refund, control, metrics |
 | [`src/http/serve.ts`](src/http/serve.ts) | `node:http` binding, so the handlers are a daemon rather than a library |
@@ -745,6 +747,36 @@ values, and the live tests re-read them from chain rather than trusting the
 table. Adapters still prefer whatever the merchant's challenge advertises; this
 is the fallback, and the reason that fallback cannot be a constant.
 
+## The threat catalogue
+
+[`threats/README.md`](threats/README.md) — 56 entries, one per attack:
+
+> **The attack.** Re-sign a mandate reusing a `jti` that has already been spent
+> against, with a fresh `max_total`. Every signature is valid and every caveat
+> narrows.
+>
+> **Why it works.** The `jti` is the key for consumption state, so a Ledger that
+> keys a counter by `jti` and trusts whatever content arrives with it has just
+> been told the budget is full again. The signature chain alone does not prevent
+> this — nothing in §7 is violated.
+>
+> **The check.** The Ledger stores a hash of the link's JWS at materialization
+> and rejects a later presentation of the same `jti` with different content.
+>
+> **Proven by.** `test/ledger.test.ts` — *rejects a jti reused with different content*
+
+Every test named is resolved against the actual suite by
+[`test/threats.test.ts`](test/threats.test.ts), so renaming a cited test breaks
+the build. That is the whole point: a security table's failure mode is claiming a
+mitigation nothing enforces, and it reads exactly the same either way. Entries
+that cannot cite a test carry a stated gap and are listed first.
+
+Writing it turned up two things nothing was enforcing — the `'ascii'` hash
+truncation had a long comment and no test, and §13's offline profile had five
+constraints that no code applied as a unit.
+
+Regenerate with `npm run threats`.
+
 ## Status
 
 Not audited, not production-ready.
@@ -762,10 +794,11 @@ ledger runs as a daemon with idempotency inside the debit transaction, and the
 principal has a console with a working kill switch. Revocation propagates to
 offline merchants through signed status lists rather than waiting out `exp`.
 
-Still missing: the §16 threat catalogue as one entry per attack with a test id,
-and the §18 open questions marked *build* in the roadmap — quote binding, AP2/ACP
-interop, salted-hash paths in receipts. Escrow is deliberately absent; every path
-through it ends with the ledger holding the float.
+Still missing: the §18 open questions marked *build* in the roadmap — quote
+binding, AP2/ACP interop, salted-hash paths in receipts — and a deployment that
+tracks live offline grants so the §13 risk budget has something to sum. Escrow is
+deliberately absent; every path through it ends with the ledger holding the
+float.
 
 No payment has ever been made from this codebase and no funded key has ever been
 loaded into it. Every network test is a read-only `eth_call` or a testnet

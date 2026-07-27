@@ -21,6 +21,7 @@ const TITLES: Partial<Record<ErrorCode, string>> = {
   step_up_required: 'Human approval required',
   mandate_revoked: 'Mandate revoked',
   status_unknown: 'Revocation status could not be established',
+  offline_profile_violated: 'Mandate may not be settled offline',
   mandate_expired: 'Mandate outside its validity window',
   breaker_tripped: 'Spending halted by a circuit breaker',
   token_replayed: 'Spend token already used',
