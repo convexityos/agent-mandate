@@ -26,7 +26,7 @@ ordering below rather than for any particular item in it.
 | Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler, HTTP service | — |
 | Revocation | §10.3 online, signed bitstring status lists for offline, merchant cache, pre-materialization revoke | — |
 | Offline mode | §13 profile enforced as one check against the fold; per-merchant, per-currency risk budget | tracking live grants is the deployment's |
-| Threat model | 56-entry catalogue, every citation resolved against the suite, gaps stated | — |
+| Threat model | 57-entry catalogue, every citation resolved against the suite, gaps stated | — |
 | Settlement | custodial + non-custodial x402, card/ACH-shaped rail, EIP-712/3009, `authorizationState` | escrow (deliberately — see triage) |
 | Transport | §14 binding, merchant verifier, agent client, `mandatedFetch` | — |
 | Agents | signer, directive execution, MCP mandate gateway, PreToolUse/PostToolUse hook | — |
@@ -423,7 +423,7 @@ the migration check the last schema change did not get until it broke.
 ### 3.3 Threat catalogue — **done**
 
 [`threats/README.md`](threats/README.md), generated from
-[`test/threats.build.ts`](test/threats.build.ts). 56 entries, one per attack, in
+[`test/threats.build.ts`](test/threats.build.ts). 57 entries, one per attack, in
 the format the `jti` re-issue and replay-ordering findings suggested: **the
 attack, why it works against the obvious implementation, the check, and the test
 that proves the check runs.**
@@ -487,7 +487,7 @@ Numbering follows §18.
 | 5 | Privacy of `path` in receipts | **Build.** Receipts currently hand the org chart to anyone who reads one, which undercuts the privacy claim in §1.1. Salted-hash form preserves rollup; accept the audit cost. |
 | 9 | Co-signed spend accounts | **Design now, build deliberately.** The only route from detective to preventive control without custody — session keys plus a timelock for unilateral principal withdrawal. Needs a contract and an audit, so it is not a sprint. |
 | 8 | Reconciliation cadence | **Answered.** §1.3 built; spec §12.2.3 written. |
-| 1 | Cross-ledger delegation | **Defer.** Inter-ledger consumption accounting is a second system. The §7 "all links agree on `ledger`" rule is a fine answer for now. |
+| 1 | Cross-ledger delegation | **Defer.** Inter-ledger consumption accounting is a second system. The §7 "all links agree on `ledger`" rule is a fine answer for now — *once the serving ledger is also the named one*, which it was not until §6 below. |
 | 10 | Non-EIP-3009 rails | **Defer.** [`DelegatedTransferRail`](src/rail/delegated-transfer.ts) already keeps the abstraction honest by declaring neither guarantee. |
 | 4 | Human-to-human sub-delegation | **Defer.** Product and regulatory question, not a technical one. |
 | 2, 7 | Escrow | **Leave alone.** The spec is honest that this is the largest unresolved gap, and every path through it ends with the ledger holding the float — becoming a custodian, with everything that implies. |
@@ -569,6 +569,103 @@ spending key into a web form. A principal who would rather not is right to sign
 offline instead; the endpoints take a JWS from anywhere.
 
 ---
+
+## 6. The ledger that answered for another ledger — **fixed**
+
+A fourth of the kind this document keeps finding: not a missing feature, but a
+rule that was written down, enforced, and enforced against nothing.
+
+`verifyChain` checks that every link in a chain agrees on `ledger` — §7 step 3,
+implemented exactly as specified. `LedgerConfig.url` was used solely as the `iss`
+of minted spend tokens. The two were never compared. So a mandate naming
+`https://ledger.b.example` was verified, accepted and **debited** by a ledger
+serving `https://ledger.a.example`, and since consumption state is per-ledger,
+`max_total` was a cap per ledger rather than a cap. One mandate, spent in full,
+at every ledger that would take it.
+
+The agreement rule reads like it bounds something and does not. Agreement among
+the links makes a chain internally *coherent*; it says nothing about who is
+allowed to act on it. Open question 1 rested on that rule — "cross-ledger
+delegation is currently forbidden by §7 step 3" — when in fact cross-ledger
+spending was not forbidden but silently supported, and it was the *accounting*
+that was missing.
+
+What made it findable: `Merchant.handle` has done the mirror-image check since
+§14 landed, refusing a spend token whose `iss` is not the ledger it settles with.
+One side of the protocol checked that a credential named it and the other did
+not.
+
+The fix is six lines in `reserve`, six more in `register` — which needed it for a
+reason of its own, since the status list URI is derived as
+`{ledger}/v1/status/{root}` and registering a foreign chain mints an index no
+merchant will ever fetch. Three things the fix turned up that the report of the
+bug did not:
+
+- **The blast radius was not zero.** Four test files had a `Ledger` whose `url`
+  disagreed with the `ledger` claim their own fixtures minted — every spend in
+  `harness-hook`, `noncustodial`, `agent-directive` and `testnet.live` was
+  exercising the hole rather than the feature. Cheap to fix and worth naming:
+  the fixtures had drifted precisely where nothing was checking.
+- **`am replay` would have broken for every user**, because its throwaway ledger
+  was built at the placeholder `https://ledger.invalid`. It now adopts the
+  chain's own `ledger`, which is both what `am attenuate` already did and the
+  only honest reading of the question `replay` answers.
+- **`register` did not have the check either**, contrary to the report. Nothing
+  in the codebase did.
+
+No conformance vector covers it, deliberately and for the same reason `max_total`
+has none (§3.1): a vector runner holds no ledger identity to compare against.
+This is a property of a deployment, not of a chain, so it is pinned by tests —
+including one that spends a mandate to zero at the ledger it names and then
+presents it to a second, which is the finding stated as money rather than as an
+error code.
+
+It is catalogue entry `multi-ledger-budget-multiplication` (§3.3), and writing
+that entry is what found the second half of the bug — which is the argument for
+the catalogue's format rather than an aside. The entry has to cite a test or
+state a gap, and the first draft had to state one: the fix was in `Ledger`, and
+`Ledger` is not the only party that acts on a chain.
+
+**The offline merchant was the worse case.** §13 settles with no ledger on the
+path, so the merchant is the *only* party acting, and `verifyChain` held no
+ledger identity to give it — `checkOfflineProfile` takes the effective caveats
+and the window and never sees `ledger` at all. A merchant settling with ledger A
+could accept a chain naming ledger B and report the consumption to A, which has
+no record of that root. The spend then debits **nothing, anywhere**: not B, which
+never hears about it, and not A, which cannot attribute it. §13's caps were
+bounding an exposure no ledger was accounting for.
+
+So the check moved into `verifyChain`, where §7 step 3 lives, and
+`VerifyOptions.ledger` is **required** with `ANY_LEDGER` as the opt-out. That is
+the `NO_REQUEST` pattern and it is the right one here for the same reason: this
+bug *is* a forgotten check, so an absent parameter and a deliberate decline must
+not look the same in the source. I had argued against this shape earlier in the
+same branch, on the grounds that only one caller had a ledger identity. That was
+true and it was the wrong conclusion — the second caller was the one with no
+ledger behind it to catch the mistake.
+
+Three parties are bound now: `reserve`, `register`, and the offline merchant. The
+gateway passes the ledger's URL too, so `tools/list` cannot advertise a tool that
+`reserve` would refuse on the chain's address. `Ledger.url` is public for that,
+and `GatewayLedger` carries it so the two cannot disagree about which ledger they
+are fronting.
+
+One thing found in passing, and fixed separately: **`src/verify.ts` was binary to
+git.** `NO_REQUEST` held a literal NUL byte rather than the escape `\0`, at byte
+1359 — inside git's 8000-byte binary-detection window — so the §7 implementation,
+the single most review-sensitive file in the repo, had produced no readable diff
+in any commit that ever touched it. Nobody could have reviewed a change to chain
+verification by reading the diff, because there wasn't one.
+
+`src/ledger/store.ts` had three more, in the revocation key `root\0jti`. Those
+escaped notice for the opposite reason: they sit past byte 8000, so git classified
+that file as text and the diffs were fine. Same latent defect, different luck.
+
+All four are escapes now, with identical runtime values — verified by asserting
+the sentinel against a reconstructed literal and by round-tripping a revocation
+key, rather than by trusting that it compiled. NUL remains the right choice for
+both: it is uninhabitable by any real value, which is exactly what a sentinel and
+a composite-key separator each need.
 
 ## Recommended sequence
 

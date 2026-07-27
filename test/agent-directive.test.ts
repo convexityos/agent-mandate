@@ -9,10 +9,12 @@ import { MemoryLedgerStore } from '../src/ledger/store.js';
 import { X402NonCustodialRail, type X402Intent } from '../src/rail/x402-noncustodial.js';
 import { type AgentKey, generateAgentKey } from '../src/sign.js';
 import { BASE_CAIP2, FUNDING_SPREADS, LIVE, USDC_BASE, captureFor, urlFor } from './fixtures/x402.js';
-import { NOW, buildChain, trustOnly, usd } from './helpers.js';
+import { LEDGER, NOW, buildChain, trustOnly, usd } from './helpers.js';
 
 const KEY = '0x4c0883a69102937d6231471b5dbb6204fe512961708279f2e3e8a5d4b8e3e3aa';
-const LEDGER_URL = 'https://ledger.optera.one';
+// The chain's own `ledger` claim: §7 step 3 requires the serving ledger to be
+// the named one, and a directive's `iss` is that same URL.
+const LEDGER_URL = LEDGER;
 
 let principal: AgentKey;
 let agentKey: AgentKey;

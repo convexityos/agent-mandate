@@ -215,7 +215,7 @@ consumption decisions.
 | `par` | MUST | Parent `jti`, or `null` for a root mandate |
 | `iat`/`nbf`/`exp` | MUST | Validity window |
 | `cnf.jkt` | MUST | JWK SHA-256 thumbprint (RFC 7638) of the holder's public key |
-| `ledger` | MUST | Ledger base URL. All links in a chain **MUST** agree. |
+| `ledger` | MUST | Ledger base URL. All links in a chain **MUST** agree, and a Ledger **MUST** refuse a chain that does not name it (§7 step 3). |
 | `cav` | MUST | Caveat object (§6). MAY be empty `{}`, meaning unbounded. |
 | `st` | MAY | Non-negative integer index into this root's status list (§10.3.1). Absent means "not revocable offline" and asserts nothing about validity. Not a caveat: it carries no authority, participates in no lattice, and is not inherited. |
 
@@ -394,6 +394,9 @@ verify_chain(chain, request, now) -> effective_caveats | error
   1.  1 ≤ len(chain) ≤ MAX_DEPTH                      else chain_invalid
   2.  all links have v == "am/1" and typ == "mandate"  else chain_invalid
   3.  all links agree on `ledger`                       else chain_invalid
+      chain[0].ledger == self, for any verifier that      else chain_invalid
+        will ACT on the chain rather than merely
+        verify it (a Ledger; an offline Merchant)
 
   4.  root = chain[0]
       root.par == null                                  else chain_invalid
@@ -441,6 +444,48 @@ verify_chain(chain, request, now) -> effective_caveats | error
 
   10. return eff, window
 ```
+
+**Step 3 has two halves, and only the first is a property of the chain.** "All
+links agree on `ledger`" makes a chain internally consistent. On its own it
+bounds nothing: agreement among the links says the delegation is coherent, not
+that whoever is reading it is the party the Principal addressed it to. Any
+verifier that will **act** on a chain **MUST** therefore also check that
+`chain[0].ledger` names *itself*, and refuse with `chain_invalid` otherwise.
+
+Skipping it costs the budget. Consumption state (§10.1) is per-Ledger, so a
+mandate a second Ledger will accept has a second `max_total` — the same grant
+spends in full at every Ledger that takes it, with no rule above broken along the
+way. This is the mirror of the check a Merchant already makes on a spend token's
+`iss` (§14.2): every party refuses a credential naming a counterparty it is not.
+
+**"Act on" is the operative phrase, and it reaches past the Ledger.** Two parties
+are bound:
+
+- a **Ledger** asked to `reserve` or `register`, which is where the budget lives;
+- an **offline Merchant** (§13), which is the subtler one and the more dangerous.
+  Offline settlement happens with no Ledger on the path, so the Merchant is the
+  only party acting on the chain. A Merchant that settles with Ledger A and
+  accepts a chain naming Ledger B reports that consumption to A, which has no
+  record of the root — so the spend debits nothing, anywhere, and the §13 caps
+  bound an exposure no ledger is accounting for.
+
+A verifier that merely *verifies* — a conformance-vector runner, a CLI inspecting
+a credential it has no relationship with — holds no identity to compare and is
+bound only by the first half. Implementations **SHOULD** make that an explicit
+declaration rather than an omission: the failure mode of this rule is that
+somebody forgets it, and an absent parameter and a deliberate opt-out must not
+look the same in the source.
+
+One note on applying it: trailing slashes are not significant, because
+`{ledger}/v1/status/{root}` (§10.3.1) already treats `{url}` and `{url}/` as one
+list and the two notions of Ledger identity must not diverge. Nothing else is
+normalized, since `ledger` is an identity to compare rather than a URI to
+resolve.
+
+This constrains implementations, not the wire format: the bytes of a mandate and
+its verdict at the Ledger it names are unchanged, so §17.3 is satisfied. What
+changes is a deployment that was serving chains addressed elsewhere, which now
+refuses them — correctly, and visibly rather than silently.
 
 ```
 narrows(child_cav, parent_cav) -> bool
@@ -1434,6 +1479,7 @@ still valid.
 | Overdraw on a mandate's first concurrent spends | Nodes locked by key, not by row — a row that does not exist locks nothing (§10.1) | `first-spend-overdraw` |
 | Deadlock as a denial of service | Path rows locked root-to-leaf, always (§10.1) | `lock-order-deadlock` |
 | Sibling collusion | Path-walk debit makes joint spend bounded by the common ancestor (§10.1) | `sibling-collusion` |
+| Spending one mandate at every ledger | Links agreeing on `ledger` binds nothing; the serving Ledger must also be the named one (§7 step 3) | `multi-ledger-budget-multiplication` |
 | Retry-storm griefing | `rate` caveat enforced at every ancestor + burn-rate breaker (§10.4) | `retry-storm-griefing` |
 | Refunds used to reset a rate limit | A refund credits budget and **not** the rate counter (§10.2) | `refund-inflates-rate` |
 | Agent approving its own step-up | The handle records a question; the approval is a separate signed answer (§10.5) | `step-up-self-approval` |
@@ -1519,7 +1565,11 @@ else is additive.
 
 1. **Cross-ledger delegation.** Can an agent under Ledger A sub-delegate to an agent
    settling on Ledger B? Requires inter-ledger consumption accounting. Currently
-   forbidden by the "all links agree on `ledger`" rule in §7 step 3.
+   forbidden by *both* halves of §7 step 3 — the links must agree on `ledger`,
+   and the serving Ledger must be the one they agree on. The second half is what
+   does the work here: without it the question answers itself in the worst way,
+   since a chain naming B is simply accepted by A and the "forbidden" case is the
+   supported one.
 2. **Escrow release incentives.** Under `escrow_schema` the payer decides whether
    it pays. Dual-signed receipts make a dishonest verdict adjudicable but do not
    prevent it. See §12.3 — this is the largest unresolved gap in the design.

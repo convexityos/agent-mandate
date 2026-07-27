@@ -15,7 +15,7 @@ import { Ledger } from '../src/ledger/ledger.js';
 import { MemoryLedgerStore } from '../src/ledger/store.js';
 import { toScaled } from '../src/money.js';
 import { type AgentKey, generateAgentKey } from '../src/sign.js';
-import { NOW, buildChain, trustOnly, usd } from './helpers.js';
+import { LEDGER, NOW, buildChain, trustOnly, usd } from './helpers.js';
 
 /**
  * §2.3 — the harness hook.
@@ -45,7 +45,9 @@ beforeEach(() => {
   stateDir = mkdtempSync(join(tmpdir(), 'am-hook-'));
 
   ledger = new Ledger({
-    url: 'https://ledger.local',
+    // Must match the `ledger` claim `buildChain` mints, or §7 step 3 refuses
+    // every reserve here before any of the hook's behaviour is reached.
+    url: LEDGER,
     key: generateAgentKey(),
     store: new MemoryLedgerStore(() => clock),
     isTrustedRootIssuer: trustOnly(principal),
@@ -384,6 +386,61 @@ describe('the executable keeps the reason channel clean', () => {
         };
         expect(reason.hookSpecificOutput.permissionDecision).toBe('deny');
         expect(reason.systemMessage).toContain('effect_not_permitted');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  /**
+   * The config the README documents carries no `ledgerUrl`, and §7 step 3 now
+   * requires the ledger to be the one the chain names — so the old
+   * `https://ledger.local` default would refuse every priced call in every
+   * deployment whose mandate named anything else. The shim takes the chain's own
+   * claim instead.
+   *
+   * This has to be an *allow* case. The refusal test above is answered by §7
+   * coverage inside `verifyChain`, which returns before the ledger check is ever
+   * reached, so it would stay green with the shim's default broken.
+   */
+  it.skipIf(!existsSync(built))(
+    'runs the README config, which names no ledgerUrl, without refusing everything',
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'am-hook-url-'));
+      try {
+        const tokens = buildChain(principal, [
+          {
+            holder: agent,
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            jti: 'mnd_root',
+            cav: { max_total: usd('1.00'), aud: ['claude-code'] },
+          },
+        ]);
+        const configPath = join(dir, 'config.json');
+        writeFileSync(
+          configPath,
+          JSON.stringify({
+            tokens, // naming LEDGER, which is not the shim's fallback default
+            stateDir: join(dir, 'state'),
+            ledgerKeySeed: '09'.repeat(32),
+            trustedRootIssuer: principal.did,
+            prices: { WebFetch: { price: usd('0.02'), effect: 'read' } },
+          }),
+        );
+
+        const child = spawnSync(process.execPath, [join(process.cwd(), 'bin', 'am-hook.mjs')], {
+          input: JSON.stringify({
+            session_id: 's',
+            hook_event_name: 'PreToolUse',
+            tool_name: 'WebFetch',
+            tool_input: { url: 'https://example.com' },
+          }),
+          env: { ...process.env, AM_HOOK_CONFIG: configPath },
+          encoding: 'utf8',
+        });
+
+        expect(child.status).toBe(0);
+        expect(JSON.parse(child.stdout).hookSpecificOutput.permissionDecision).toBe('allow');
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

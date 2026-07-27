@@ -86,6 +86,7 @@ const result = await verifyChain(chainOfJwsStrings, {
     purpose: 'research.readonly',
     taskId: 'tsk_01J8QQ...',
   },
+  ledger: 'https://ledger.example.com', // yours — the chain must name it (§7 step 3)
   isTrustedRootIssuer: (iss) => iss === principalDid,
   presenterJkt, // from your RFC 9421 verification
 });
@@ -93,6 +94,15 @@ const result = await verifyChain(chainOfJwsStrings, {
 if (!result.ok) return problemJson(result.code, result.detail);
 // result.effective is the folded authority; hand it to the ledger to debit.
 ```
+
+`ledger` is required, and `ANY_LEDGER` is how you decline it. "All links agree on
+`ledger`" only makes a chain internally coherent — it does not make the chain
+addressed to *you*, and consumption state is per-party, so a chain you accept
+without checking hands its holder a second full `max_total`. Pass `ANY_LEDGER`
+when you genuinely have no identity to compare (a conformance-vector runner, a
+CLI inspecting somebody else's credential); it is a sentinel rather than an
+optional field so that declining is visible in the source and `grep ANY_LEDGER`
+finds every place it happens.
 
 `verifyChain` returns a result rather than throwing. It runs on
 attacker-controlled input on the spend path, and a thrown exception is one stray
@@ -339,6 +349,7 @@ setInterval(() => void status.refresh(statusListUri(LEDGER, root)), 60_000);
 // On the spend path: a synchronous read of a cached bitstring, no network.
 const verdict = await verifyChain(tokens, {
   now, request, isTrustedRootIssuer,
+  ledger: LEDGER,        // the one you settle with — offline, nothing else checks
   status: status.source(),
   requireStatus: true,   // refuse anything you could not later revoke
 });

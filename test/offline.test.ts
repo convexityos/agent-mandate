@@ -8,8 +8,8 @@ import {
   offlineRiskBudget,
 } from '../src/offline.js';
 import { type AgentKey, generateAgentKey } from '../src/sign.js';
-import { verifyChain } from '../src/verify.js';
-import { NOW, buildChain, trustOnly, usd } from './helpers.js';
+import { ANY_LEDGER, verifyChain } from '../src/verify.js';
+import { LEDGER, NOW, buildChain, trustOnly, usd } from './helpers.js';
 
 /**
  * §13 — the offline profile, and the exposure it creates.
@@ -45,6 +45,7 @@ const verifyOffline = (cav: Caveats, span = 3600) =>
   verifyChain(buildChain(principal, [{ holder: agent, cav, nbf: NOW, exp: NOW + span }]), {
     now: NOW + 10,
     request: { resource: RESOURCE, amount: usd('1.00') },
+    ledger: LEDGER,
     isTrustedRootIssuer: trustOnly(principal),
     offline: true,
   });
@@ -118,6 +119,7 @@ describe('verifyChain in offline mode', () => {
     const online = await verifyChain(tokens, {
       now: NOW + 10,
       request: { resource: RESOURCE, amount: usd('1.00') },
+      ledger: LEDGER,
       isTrustedRootIssuer: trustOnly(principal),
     });
     expect(online.ok).toBe(true);
@@ -146,10 +148,90 @@ describe('verifyChain in offline mode', () => {
     const result = await verifyChain(narrowing, {
       now: NOW + 10,
       request: { resource: RESOURCE, amount: usd('1.00') },
+      ledger: LEDGER,
       isTrustedRootIssuer: trustOnly(principal),
       offline: true,
     });
     expect(result.ok).toBe(true);
+  });
+});
+
+/**
+ * §7 step 3 at the merchant, which is where it was missing longest.
+ *
+ * The Ledger got this check first, because that is where the budget lives. But an
+ * offline merchant settles *without* the Ledger, so it is the one party that acts
+ * on a chain with nothing else on the path — and it was checking the profile's
+ * four caps without ever asking whether the chain was addressed to a Ledger it
+ * has any relationship with.
+ */
+describe('§7 step 3 — a chain must name the ledger this merchant settles with', () => {
+  const OTHER = 'https://ledger.b.example';
+
+  /** Profile-conforming in every respect, and addressed to somebody else. */
+  const foreign = () =>
+    buildChain(principal, [
+      {
+        holder: agent,
+        cav: offlineCav(),
+        nbf: NOW,
+        exp: NOW + 3600,
+        tamper: (c) => {
+          c.ledger = OTHER;
+        },
+      },
+    ]);
+
+  it('refuses a conforming chain addressed to another ledger', async () => {
+    const r = await verifyChain(foreign(), {
+      now: NOW + 10,
+      request: { resource: RESOURCE, amount: usd('1.00') },
+      ledger: LEDGER,
+      isTrustedRootIssuer: trustOnly(principal),
+      offline: true,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.code).toBe('chain_invalid');
+      expect(r.detail).toContain(OTHER);
+    }
+  });
+
+  /**
+   * The consequence the gap actually had. A merchant settling with A accepts a
+   * chain naming B and reports the consumption to A, which has never heard of
+   * that root — so the spend debits nothing, anywhere, and the mandate is
+   * offline-spendable without limit. Refusing it is the whole fix.
+   */
+  it('is what stops an offline spend that would debit no ledger at all', async () => {
+    const settlesWithA = (tokens: string[]) =>
+      verifyChain(tokens, {
+        now: NOW + 10,
+        request: { resource: RESOURCE, amount: usd('1.00') },
+        ledger: LEDGER,
+        isTrustedRootIssuer: trustOnly(principal),
+        offline: true,
+      });
+
+    // Same principal, same profile, same everything but the address.
+    const ours = buildChain(principal, [
+      { holder: agent, cav: offlineCav(), nbf: NOW, exp: NOW + 3600 },
+    ]);
+    expect((await settlesWithA(ours)).ok).toBe(true);
+    expect((await settlesWithA(foreign())).ok).toBe(false);
+  });
+
+  it('still lets a party with no ledger identity verify the chain', async () => {
+    // A vector runner or a CLI inspecting somebody else's credential. The opt-out
+    // is a sentinel rather than an omission precisely so this stays visible.
+    const r = await verifyChain(foreign(), {
+      now: NOW + 10,
+      request: { resource: RESOURCE, amount: usd('1.00') },
+      ledger: ANY_LEDGER,
+      isTrustedRootIssuer: trustOnly(principal),
+      offline: true,
+    });
+    expect(r.ok).toBe(true);
   });
 });
 

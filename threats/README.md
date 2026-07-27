@@ -16,7 +16,7 @@ valuable findings in this project were mitigations that **existed and did not
 work**, and a catalogue that cannot tell the difference is worse than no
 catalogue at all.
 
-56 entries. 55 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
+57 entries. 56 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
 
 Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run threats`.
 
@@ -378,6 +378,22 @@ Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run t
 **Where.** [`src/ledger/ledger.ts`](../src/ledger/ledger.ts)
 
 **Proven by.** [`test/ledger.test.ts`](../test/ledger.test.ts) — *bounds sibling collusion by the common ancestor*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *debits every ancestor, not just the leaf*<br>[`test/store-suite.ts`](../test/store-suite.ts) — *holds the task ceiling across two principals sharing a task*
+
+---
+
+### Spending one mandate at every ledger
+
+<sub>`multi-ledger-budget-multiplication` · §7, §10.1, §13 · preventive control</sub>
+
+**The attack.** Present the same chain to several Ledgers. Each verifies it, each accepts it, each debits its own state — so a `max_total` of 20.00 buys 20.00 at every Ledger that will take it.
+
+**Why it works.** §7 step 3 says "all links agree on `ledger`", which *reads* like it binds a chain to one Ledger and does not. Agreement among the links makes a chain internally coherent; it says nothing about who is reading it. Consumption state is per-Ledger, so a second Ledger that accepts the chain offers a second full budget — and nothing in §7 is violated along the way, because every signature is valid, every caveat narrows, and every link does agree. The natural implementation uses its own URL only as the `iss` of minted spend tokens and never compares it to anything, which is exactly what this one did.
+
+**The check.** The second half of §7 step 3, enforced in `verifyChain` itself so it binds every party that acts on a chain rather than only the one that noticed first. `VerifyOptions.ledger` is **required**, and declining the check is the `ANY_LEDGER` sentinel rather than an omitted field — the failure mode of this rule is that somebody forgets it, so an absent parameter and a deliberate opt-out must not look alike. Three parties are bound: a Ledger at `reserve` and at `register`, and an **offline** merchant, which is the one that settles with no Ledger on the path and is therefore the only party acting on the chain at all. `register` needs it independently — the status list URI is derived as `{ledger}/v1/status/{root}`, so registering a foreign chain mints an index no merchant will ever fetch and records the mandate as revocable when it is not.
+
+**Where.** [`src/verify.ts`](../src/verify.ts), [`src/ledger/ledger.ts`](../src/ledger/ledger.ts)
+
+**Proven by.** [`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses a chain addressed to another ledger*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses even when every link agrees — agreement is not address*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *does not let one mandate be spent in full at every ledger that takes it*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses to register one either — a list nobody would fetch is worse than none*<br>[`test/offline.test.ts`](../test/offline.test.ts) — *refuses a conforming chain addressed to another ledger*<br>[`test/offline.test.ts`](../test/offline.test.ts) — *is what stops an offline spend that would debit no ledger at all*
 
 ---
 

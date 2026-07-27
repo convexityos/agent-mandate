@@ -297,6 +297,7 @@ describe('verifyChain against a status list', () => {
     verifyChain(tokens, {
       now: clock,
       request: { resource: RESOURCE, amount: usd('1.00') },
+      ledger: LEDGER,
       isTrustedRootIssuer: trustOnly(principal),
       ...opts,
     });
@@ -525,6 +526,7 @@ describe('the ledger publishing a status list', () => {
     const result = await verifyChain(tokens, {
       now: clock,
       request: { resource: RESOURCE, amount: usd('1.00') },
+      ledger: LEDGER,
       isTrustedRootIssuer: trustOnly(principal),
       status: () => opened.list,
     });
@@ -854,6 +856,7 @@ describe('end to end over real HTTP', () => {
       verifyChain(tokens, {
         now: clock,
         request: { resource: RESOURCE, amount: usd('1.00') },
+        ledger: LEDGER,
         isTrustedRootIssuer: trustOnly(principal),
         status: cache.source(),
         requireStatus: true,

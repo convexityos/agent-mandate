@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { AgentKey } from '../src/sign.js';
-import { NOW, buildChain, generateAgentKey, trustOnly, usd } from './helpers.js';
+import { LEDGER, NOW, buildChain, generateAgentKey, trustOnly, usd } from './helpers.js';
 import { type VerifyResult, verifyChain } from '../src/verify.js';
 
 let principal: AgentKey;
@@ -27,6 +27,9 @@ function verify(tokens: string[], overrides: Partial<Parameters<typeof verifyCha
   return verifyChain(tokens, {
     now: NOW + 10,
     request: baseRequest,
+    // The value `buildChain` mints, so the §7 step 3 identity check is live for
+    // every test here rather than opted out of by default.
+    ledger: LEDGER,
     isTrustedRootIssuer: trustOnly(principal),
     ...overrides,
   });

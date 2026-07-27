@@ -50,7 +50,7 @@ if (!existsSync(fileURLToPath(built))) {
   process.exit(0); // never wedge the session over our own packaging
 }
 
-const { Ledger, MandateHook, MemoryLedgerStore, agentKeyFromSeed, renderHookOutput } =
+const { Ledger, MandateHook, MemoryLedgerStore, agentKeyFromSeed, parseCompactJws, renderHookOutput } =
   await import(built.href);
 
 function readStdin() {
@@ -84,8 +84,17 @@ try {
     store = new MemoryLedgerStore();
   }
 
+  // §7 step 3: a ledger must be the one the chain names, so this cannot be an
+  // arbitrary placeholder — `https://ledger.local` used to be, and would now
+  // refuse every priced call against a mandate naming anything else. The chain's
+  // own claim is the right default: this ledger is a local metering counter
+  // whose identity is not independently meaningful, and the same config supplies
+  // both halves, so requiring them to be typed twice protects nobody.
+  // `ledgerUrl` stays available for a deployment where it is meaningful.
+  const chainLedger = parseCompactJws(cfg.tokens?.[0] ?? '')?.payload?.ledger;
+
   const ledger = new Ledger({
-    url: cfg.ledgerUrl ?? 'https://ledger.local',
+    url: cfg.ledgerUrl ?? chainLedger ?? 'https://ledger.local',
     key: agentKeyFromSeed(Uint8Array.from(Buffer.from(cfg.ledgerKeySeed, 'hex'))),
     store,
     isTrustedRootIssuer: (iss) => iss === cfg.trustedRootIssuer,

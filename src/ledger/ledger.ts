@@ -350,6 +350,15 @@ export class Ledger {
   }
 
   /**
+   * This ledger's base URL — the one a chain must name to be spendable here
+   * (§7 step 3). Public so an enforcement layer in front of the ledger can hold
+   * a chain to the same rule the ledger will.
+   */
+  get url(): string {
+    return this.cfg.url;
+  }
+
+  /**
    * Spec §10.1 — verify the chain, then debit consumption along the whole
    * ancestor path in one critical section, then mint the spend token.
    *
@@ -366,6 +375,9 @@ export class Ledger {
     const verified = await verifyChain(req.tokens, {
       now,
       request: req.request,
+      // §7 step 3: a chain addressed to another ledger is refused on its address,
+      // before anything here reads its contents.
+      ledger: this.cfg.url,
       isTrustedRootIssuer: this.cfg.isTrustedRootIssuer,
       ...(this.cfg.resolveKey !== undefined ? { resolveKey: this.cfg.resolveKey } : {}),
       ...(req.presenterJkt !== undefined ? { presenterJkt: req.presenterJkt } : {}),
@@ -1467,6 +1479,11 @@ export class Ledger {
       // Everything else — signatures, attenuation, depth, the window — is
       // checked exactly as a spend would check it.
       request: NO_REQUEST,
+      // Needed here for a reason of its own: the status list URI is derived as
+      // `{ledger}/v1/status/{root}` (§10.3), so registering a chain naming
+      // another ledger would mint an index and a signed list nobody will ever
+      // fetch, and record the mandate as revocable when it is not.
+      ledger: this.cfg.url,
       isTrustedRootIssuer: this.cfg.isTrustedRootIssuer,
       ...(this.cfg.resolveKey !== undefined ? { resolveKey: this.cfg.resolveKey } : {}),
     });

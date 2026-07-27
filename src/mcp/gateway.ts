@@ -41,6 +41,13 @@ import {
 
 /** What the gateway needs from the ledger. `Ledger` satisfies it structurally. */
 export interface GatewayLedger {
+  /**
+   * The ledger's base URL, so the gateway can hold a chain to §7 step 3 before
+   * advertising a tool the ledger would refuse on the chain's address. Part of
+   * this interface rather than a separate config field because the two must not
+   * be able to disagree about which ledger this is.
+   */
+  readonly url: string;
   reserve(req: ReserveRequest): Promise<ReserveResult>;
   settle(spendId: string, input?: SettleInput): Promise<SettleResult>;
   refund(spendId: string, reason: string): Promise<SettleResult>;
@@ -196,6 +203,9 @@ export class McpMandateGateway {
     const verified = await verifyChain(this.cfg.tokens, {
       now: this.cfg.clock(),
       request: this.requestContext(up, tool, policy),
+      // The same ledger the spend would go to, so `tools/list` cannot advertise a
+      // tool that `reserve` will refuse on the chain's address.
+      ledger: this.cfg.ledger.url,
       isTrustedRootIssuer: this.cfg.isTrustedRootIssuer,
       ...(this.cfg.resolveKey !== undefined ? { resolveKey: this.cfg.resolveKey } : {}),
     });
