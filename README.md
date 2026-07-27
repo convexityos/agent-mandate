@@ -25,6 +25,7 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/jws.ts`](src/jws.ts), [`src/didkey.ts`](src/didkey.ts) | Ed25519 JWS, `did:key`, RFC 7638 thumbprints |
 | [`src/sign.ts`](src/sign.ts) | Issuer-side helpers, kept out of the verifier's dependency graph |
 | [`test/vectors.build.ts`](test/vectors.build.ts) | §3.1 — generates the published conformance vectors |
+| [`src/cli/index.ts`](src/cli/index.ts) | §1.4 — `am mint / attenuate / verify / inspect / replay` |
 | [`src/ledger/ledger.ts`](src/ledger/ledger.ts) | §10 — reserve / settle / refund / revoke, path-walk debit |
 | [`src/ledger/store.ts`](src/ledger/store.ts) | Persistence seam; in-memory reference impl with a real critical section |
 | [`src/ledger/sql/sqlite.ts`](src/ledger/sql/sqlite.ts) | Durable store on `node:sqlite` — one writer, serialization for free |
@@ -91,6 +92,38 @@ if (!result.ok) return problemJson(result.code, result.detail);
 `verifyChain` returns a result rather than throwing. It runs on
 attacker-controlled input on the spend path, and a thrown exception is one stray
 `try/catch` away from being swallowed into an allow.
+
+### Seeing why a chain does not attenuate
+
+```bash
+npm run build && node bin/am.mjs inspect --chain chain.json
+```
+
+`am inspect` prints what each link declares beside the accumulated meet after
+folding it in:
+
+```
+  [1] mnd_a   …qVBiyH → …rHPrf2
+      declares  max_total 10.00 USD
+      meet      aud *.weatherco.com · max_per_txn 1.00 USD · max_total 10.00 USD
+                settle escrow_schema
+      inherits  aud, depth, max_per_txn, settle
+
+  [2] mnd_b   …rHPrf2 → …wT9TUP
+      declares  settle immediate
+      meet      … settle escrow_schema
+      ✗ attenuation_violation against the accumulated meet
+        settle immediate is looser than parent escrow_schema
+```
+
+That is the §7 non-transitivity defect, made visible. A link that merely *omits*
+a caveat is ⊤ on that dimension, so a grandchild can re-declare what its
+grandparent forbade while every parent-child check passes. It took property
+tests to find and takes about four seconds to see here.
+
+`am replay` is the stateful counterpart to `am verify`: it runs a sequence of
+requests against a throwaway in-memory ledger, so you can watch a budget drain
+and see which mandate on the path binds first.
 
 ### Putting a mandate in front of an MCP server
 

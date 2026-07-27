@@ -150,14 +150,47 @@ Three things worth keeping:
 Open question 8 is answered in spec §12.2.3: the duration stays deployment
 policy, the requirement to have one does not.
 
-### 1.4 CLI
+### 1.4 CLI — **done**
 
-`am mint | attenuate | verify | inspect | replay`.
+[`src/cli/`](src/cli/) — `am keygen | mint | attenuate | verify | inspect |
+replay`. No dependencies, `--json` on everything, and `run()` is exported so the
+tests drive it directly rather than spawning a process per assertion.
 
-`am inspect <chain>` should print the accumulated meet at each link. The
-non-transitivity bug in §7 — a grandchild re-declaring what its grandparent
-forbade while every parent-child check passes — took property tests to find and
-would take about four seconds to see in that output.
+`am inspect` was the justification, and it delivers. On the grandchild-escape
+chain:
+
+```
+  [1] mnd_a   …qVBiyH → …rHPrf2
+      declares  max_total 10.00 USD
+      meet      aud *.weatherco.com · max_per_txn 1.00 USD · max_total 10.00 USD
+                settle escrow_schema
+      inherits  aud, depth, max_per_txn, settle
+
+  [2] mnd_b   …rHPrf2 → …wT9TUP
+      declares  settle immediate
+      meet      … settle escrow_schema
+      ✗ attenuation_violation against the accumulated meet
+```
+
+The middle link *inherits* `settle`; the next one re-declares it. Printed beside
+each other, that is a thing you notice rather than a thing you derive — which
+was the claim.
+
+Two additions beyond the listed five:
+
+- **`keygen`**, because `mint` needs a key and there was no way to make one.
+  Writes 0600 and says out loud that anything holding it can issue mandates.
+- **`replay`** turned out to mean the stateful counterpart to `verify`. `verify`
+  answers whether a chain *may* authorize a request; it structurally cannot
+  answer whether the budget is still there, because `max_total` and `rate` are
+  consumption state. `replay` runs a sequence of requests against a throwaway
+  in-memory ledger, so "what will this mandate actually let through" has an
+  answer that does not require deploying anything.
+
+One thing worth keeping from building it: `replay` first reported the *root's*
+remaining after each spend, which put `90 USD left` directly above
+`budget_exhausted` and read as a contradiction. It reports the **binding** node —
+the tightest budget on the path — because that is the number that governs.
 
 ---
 
@@ -393,12 +426,11 @@ a spend that needed a human was the first thing to walk straight through.
 All three exist, and §1.3 and §5.2 with them. §5 is closed: the principal is no
 longer the only party in the protocol without an interface.
 
-Section 1 is complete apart from the CLI. The honest shortlist from here is
-§2.2/§2.3 (`mandatedFetch` and the harness hook, both small and both pure
-adoption), §3.2 (revocation distribution, roughly a day's work and the thing
-offline mode currently bounds only by `exp`), and §1.4 (the CLI, whose
-`am inspect` would have made the §7 non-transitivity bug visible in four
-seconds).
+**Section 1 is complete.** The honest shortlist from here is §2.2/§2.3
+(`mandatedFetch` and the harness hook, both small and both pure adoption), §3.2
+(revocation distribution, roughly a day's work and the thing offline mode
+currently bounds only by `exp`), and §3.3 (the threat catalogue, which is the
+last piece of §3 and now has a conformance suite to point its entries at).
 
 One thing this pass exposed that is not on the list anywhere: **there is no
 migration story.** `CREATE TABLE IF NOT EXISTS` does nothing to a table that

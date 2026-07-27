@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "vectors": "npm run build && node dist/test/vectors.emit.js"
+    "vectors": "npm run build && node dist/test/vectors.emit.js",
+    "am": "npm run build --silent && node bin/am.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -25,5 +26,8 @@
   "dependencies": {
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0"
+  },
+  "bin": {
+    "am": "./bin/am.mjs"
   }
 }
