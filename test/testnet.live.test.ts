@@ -9,7 +9,7 @@ import { Ledger } from '../src/ledger/ledger.js';
 import { MemoryLedgerStore } from '../src/ledger/store.js';
 import { X402NonCustodialRail, type X402Intent } from '../src/rail/x402-noncustodial.js';
 import { generateAgentKey } from '../src/sign.js';
-import { NOW, buildChain, trustOnly, usd } from './helpers.js';
+import { LEDGER, NOW, buildChain, trustOnly, usd } from './helpers.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 
 /**
@@ -83,7 +83,8 @@ describe.skipIf(!LIVE)('end-to-end on Base Sepolia, nothing broadcast', () => {
     const now = Math.floor(Date.now() / 1000);
 
     const ledger = new Ledger({
-      url: 'https://ledger.optera.one',
+      // Must be the chain's `ledger` claim, which `buildChain` mints (§7 step 3).
+      url: LEDGER,
       key: ledgerKey,
       store: new MemoryLedgerStore(() => now),
       isTrustedRootIssuer: trustOnly(principal),
@@ -154,7 +155,7 @@ describe.skipIf(!LIVE)('end-to-end on Base Sepolia, nothing broadcast', () => {
     const executed = executeDirective(reserved.directiveJws!, {
       signer,
       ledgerJwk: ledgerKey.jwk,
-      ledgerUrl: 'https://ledger.optera.one',
+      ledgerUrl: LEDGER,
       now,
       jkt: agent.jkt,
     });

@@ -29,7 +29,7 @@ import {
 } from '../src/rail/delegated-transfer.js';
 import { nonceFor } from '../src/rail/x402.js';
 import { type AgentKey, generateAgentKey } from '../src/sign.js';
-import { NOW, buildChain, trustOnly, usd } from './helpers.js';
+import { LEDGER, NOW, buildChain, trustOnly, usd } from './helpers.js';
 import { BASE_CAIP2, FUNDING_SPREADS, LIVE, USDC_BASE, captureFor, urlFor } from './fixtures/x402.js';
 
 const PAYER = '0x1111111111111111111111111111111111111111';
@@ -92,7 +92,9 @@ function x402Rail(chain = new FakeChain(), payer = PAYER) {
 
 function makeLedger(nonCustodialRail: ConstructorParameters<typeof Ledger>[0]['nonCustodialRail']) {
   return new Ledger({
-    url: 'https://ledger.optera.one',
+    // The `ledger` claim `buildChain` mints. §7 step 3 requires the serving
+    // ledger to be the named one.
+    url: LEDGER,
     key: ledgerKey,
     store: new MemoryLedgerStore(() => clock),
     isTrustedRootIssuer: trustOnly(principal),

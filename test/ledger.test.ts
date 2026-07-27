@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { Caveats } from '../src/caveats.js';
-import { Ledger } from '../src/ledger/ledger.js';
+import { type AuditEvent, Ledger } from '../src/ledger/ledger.js';
 import { MemoryLedgerStore } from '../src/ledger/store.js';
 import { type AgentKey, generateAgentKey } from '../src/sign.js';
 import { type StepUpDecisionClaims, signStepUpDecision } from '../src/stepup.js';
@@ -604,6 +604,123 @@ describe('§10.4 — circuit breakers', () => {
     const spike = await ledger.reserve({ tokens: chain, request: request('100.00') });
     expect(spike.ok).toBe(false);
     if (!spike.ok) expect(spike.code).toBe('breaker_tripped');
+  });
+});
+
+/**
+ * §7 step 3 has two halves and only one of them lives in `verifyChain`.
+ *
+ * "All links agree on `ledger`" makes a chain internally consistent. It does not
+ * make the ledger reading it the one the principal named, and consumption state
+ * is per-ledger — so until `reserve` also checked, `max_total` was a cap per
+ * ledger rather than a cap, full stop.
+ */
+describe('§7 step 3 — the chain must name this ledger', () => {
+  const OTHER = 'https://ledger.b.example';
+
+  /**
+   * A genuine chain — signed by the trusted principal, every link agreeing with
+   * every other — that simply names a different ledger. `tamper` runs before the
+   * signature, so this is not a forgery: it is exactly the credential a
+   * principal would hold if they banked at B.
+   */
+  const foreignChain = () =>
+    buildChain(principal, [
+      {
+        holder: agentA,
+        cav: rootCav(),
+        exp: NOW + 86400,
+        jti: 'mnd_root',
+        tamper: (c) => {
+          c.ledger = OTHER;
+        },
+      },
+    ]);
+
+  it('refuses a chain addressed to another ledger', async () => {
+    const r = await ledger.reserve({ tokens: foreignChain(), request: request('1.00') });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.code).toBe('chain_invalid');
+      // Both sides named, because this is a misconfiguration as often as it is
+      // an attack and the log should say which ledger thought what.
+      expect(r.detail).toContain(OTHER);
+      expect(r.detail).toContain('https://ledger.example.com');
+    }
+  });
+
+  it('refuses even when every link agrees — agreement is not address', async () => {
+    const tokens = buildChain(principal, [
+      {
+        holder: agentA,
+        cav: rootCav(),
+        exp: NOW + 86400,
+        jti: 'mnd_root',
+        tamper: (c) => {
+          c.ledger = OTHER;
+        },
+      },
+      {
+        holder: b1,
+        cav: { max_total: usd('10.00') },
+        exp: NOW + 3600,
+        jti: 'mnd_leaf',
+        tamper: (c) => {
+          c.ledger = OTHER;
+        },
+      },
+    ]);
+    // The rule `verifyChain` does enforce is satisfied: no link disagrees.
+    const r = await ledger.reserve({ tokens, request: request('1.00') });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('chain_invalid');
+  });
+
+  /**
+   * The consequence, stated as money rather than as a code.
+   *
+   * One mandate, `max_total` 20.00, drained at the ledger it names. A second
+   * ledger keeps its own consumption state and so has 20.00 of headroom to
+   * offer — the same grant, spent twice, with no rule in §7 broken along the
+   * way. Reverting `reserve`'s check turns this test red at the last line.
+   */
+  it('does not let one mandate be spent in full at every ledger that takes it', async () => {
+    const tokens = singleChain(); // names https://ledger.example.com
+    for (let i = 0; i < 4; i++) {
+      expect((await ledger.reserve({ tokens, request: request('5.00') })).ok).toBe(true);
+    }
+    expect((await ledger.remaining('mnd_root'))?.amt).toBe('0');
+    expect((await ledger.reserve({ tokens, request: request('5.00') })).ok).toBe(false);
+
+    const elsewhere = makeLedger({ url: OTHER });
+    const again = await elsewhere.reserve({ tokens, request: request('5.00') });
+    expect(again.ok).toBe(false);
+    if (!again.ok) expect(again.code).toBe('chain_invalid');
+  });
+
+  it('records the refusal, like every other §7 refusal', async () => {
+    const audit: AuditEvent[] = [];
+    const audited = makeLedger({ audit: { record: (e) => void audit.push(e) } });
+    await audited.reserve({ tokens: foreignChain(), request: request('1.00') });
+    expect(audit.map((e) => [e.event, e.code])).toEqual([['reserve.rejected', 'chain_invalid']]);
+  });
+
+  it('refuses to register one either — a list nobody would fetch is worse than none', async () => {
+    // The status list URI is `{ledger}/v1/status/{root}`, so a merchant holding
+    // this chain looks to B. Materializing it here would record it as revocable
+    // by a ledger that cannot reach anyone holding it.
+    const r = await ledger.register(foreignChain());
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('chain_invalid');
+
+    expect((await ledger.register(singleChain())).ok).toBe(true);
+  });
+
+  it('treats a trailing slash as the same ledger, as statusListUri already does', async () => {
+    const slashed = makeLedger({ url: 'https://ledger.example.com/' });
+    expect((await slashed.reserve({ tokens: singleChain(), request: request('1.00') })).ok).toBe(
+      true,
+    );
   });
 });
 

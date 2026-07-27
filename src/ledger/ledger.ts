@@ -350,6 +350,39 @@ export class Ledger {
   }
 
   /**
+   * §7 step 3, the half of it that cannot live inside `verifyChain`: the chain
+   * must name **this** ledger.
+   *
+   * `verifyChain` enforces that every link agrees on `ledger`, and on its own
+   * that bounds nothing. Agreement among the links says the delegation is
+   * internally consistent; it says nothing about whether the ledger reading them
+   * is the one the principal named. Without this check a mandate naming
+   * `https://ledger.b.example` is accepted and debited by a ledger serving
+   * `https://ledger.a.example` — and because consumption state is per-ledger,
+   * `max_total` degrades from a global cap into a per-ledger one. The same
+   * mandate then spends in full at every ledger that will take it, which is the
+   * one thing a budget is for.
+   *
+   * The mirror of the check `Merchant.handle` already makes on a spend token's
+   * `iss`: each party refuses a credential that names a counterparty it is not.
+   * The merchant had it because a spend token arrives from somewhere; a mandate
+   * arrives from somewhere too, and that was the asymmetry.
+   *
+   * Trailing slashes are normalized away because `statusListUri` already treats
+   * `{url}` and `{url}/` as the same list. Disagreeing with it here would let a
+   * chain be refused by the ledger whose status list it would nonetheless be
+   * published on — one function's notion of ledger identity has to be the
+   * other's. Nothing further is normalized: `ledger` is an identity to match,
+   * not a URI to resolve, and a host that differs by case or port is a different
+   * deployment until someone proves otherwise.
+   */
+  private foreignLedger(named: string): string | null {
+    const trim = (u: string) => u.replace(/\/+$/, '');
+    if (trim(named) === trim(this.cfg.url)) return null;
+    return `mandate names ledger ${named}, this ledger serves ${this.cfg.url}`;
+  }
+
+  /**
    * Spec §10.1 — verify the chain, then debit consumption along the whole
    * ancestor path in one critical section, then mint the spend token.
    *
@@ -383,6 +416,23 @@ export class Ledger {
         detail: verified.detail,
       });
       return { ok: false, code: verified.code, detail: verified.detail };
+    }
+
+    // Before anything reads the chain's authority, refuse a chain addressed to
+    // someone else. Placed here rather than after the coverage checks so a
+    // foreign mandate is refused on its address and never on its contents —
+    // there is nothing to learn about a grant this ledger was never party to.
+    const foreign = this.foreignLedger(verified.links[0]!.ledger);
+    if (foreign !== null) {
+      this.emit('reserve.rejected', {
+        agent: verified.leaf.sub,
+        amount: req.request.amount,
+        resource: req.request.resource,
+        taskId: req.request.taskId ?? null,
+        code: 'chain_invalid',
+        detail: foreign,
+      });
+      return { ok: false, code: 'chain_invalid', detail: foreign };
     }
 
     const uri = canonicalizeUri(req.request.resource);
@@ -1471,6 +1521,15 @@ export class Ledger {
       ...(this.cfg.resolveKey !== undefined ? { resolveKey: this.cfg.resolveKey } : {}),
     });
     if (!verified.ok) return { ok: false, code: verified.code, detail: verified.detail };
+
+    // Same rule as `reserve`, and needed here for a reason of its own. The list
+    // URI is derived as `{ledger}/v1/status/{root}` (§10.3), so a chain naming
+    // another ledger sends every merchant holding it to *that* ledger for
+    // revocation. Registering it here would mint an index and a signed list
+    // nobody will ever fetch, and record the mandate as revocable when it is
+    // not — the precise failure `register` exists to prevent.
+    const foreign = this.foreignLedger(verified.links[0]!.ledger);
+    if (foreign !== null) return { ok: false, code: 'chain_invalid', detail: foreign };
 
     const links = verified.links;
     const root = links[0]!.jti;

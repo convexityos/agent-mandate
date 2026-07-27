@@ -215,7 +215,7 @@ consumption decisions.
 | `par` | MUST | Parent `jti`, or `null` for a root mandate |
 | `iat`/`nbf`/`exp` | MUST | Validity window |
 | `cnf.jkt` | MUST | JWK SHA-256 thumbprint (RFC 7638) of the holder's public key |
-| `ledger` | MUST | Ledger base URL. All links in a chain **MUST** agree. |
+| `ledger` | MUST | Ledger base URL. All links in a chain **MUST** agree, and a Ledger **MUST** refuse a chain that does not name it (§7 step 3). |
 | `cav` | MUST | Caveat object (§6). MAY be empty `{}`, meaning unbounded. |
 | `st` | MAY | Non-negative integer index into this root's status list (§10.3.1). Absent means "not revocable offline" and asserts nothing about validity. Not a caveat: it carries no authority, participates in no lattice, and is not inherited. |
 
@@ -394,6 +394,8 @@ verify_chain(chain, request, now) -> effective_caveats | error
   1.  1 ≤ len(chain) ≤ MAX_DEPTH                      else chain_invalid
   2.  all links have v == "am/1" and typ == "mandate"  else chain_invalid
   3.  all links agree on `ledger`                       else chain_invalid
+      chain[0].ledger == self, if the verifier IS a       else chain_invalid
+        Ledger being asked to spend or register
 
   4.  root = chain[0]
       root.par == null                                  else chain_invalid
@@ -441,6 +443,32 @@ verify_chain(chain, request, now) -> effective_caveats | error
 
   10. return eff, window
 ```
+
+**Step 3 has two halves, and only the first is a property of the chain.** "All
+links agree on `ledger`" makes a chain internally consistent. On its own it
+bounds nothing: agreement among the links says the delegation is coherent, not
+that whoever is reading it is the party the Principal addressed it to. A Ledger
+asked to `reserve` or `register` against a chain **MUST** therefore also check
+that `chain[0].ledger` names *itself*, and refuse with `chain_invalid` otherwise.
+
+Skipping it costs the budget. Consumption state (§10.1) is per-Ledger, so a
+mandate a second Ledger will accept has a second `max_total` — the same grant
+spends in full at every Ledger that takes it, with no rule above broken along the
+way. This is the mirror of the check a Merchant already makes on a spend token's
+`iss` (§14.2): every party refuses a credential naming a counterparty it is not.
+
+Two notes on applying it. Trailing slashes are not significant, because
+`{ledger}/v1/status/{root}` (§10.3.1) already treats `{url}` and `{url}/` as one
+list and the two notions of Ledger identity must not diverge; nothing else is
+normalized, since `ledger` is an identity to compare rather than a URI to
+resolve. And the check binds *Ledgers*, not verifiers in general — a stateless
+verifier, an offline Merchant, or a CLI holds no Ledger identity to compare
+against and is bound only by the first half.
+
+This constrains implementations, not the wire format: the bytes of a mandate and
+its verdict at the Ledger it names are unchanged, so §17.3 is satisfied. What
+changes is a deployment that was serving chains addressed elsewhere, which now
+refuses them — correctly, and visibly rather than silently.
 
 ```
 narrows(child_cav, parent_cav) -> bool
@@ -1460,7 +1488,11 @@ else is additive.
 
 1. **Cross-ledger delegation.** Can an agent under Ledger A sub-delegate to an agent
    settling on Ledger B? Requires inter-ledger consumption accounting. Currently
-   forbidden by the "all links agree on `ledger`" rule in §7 step 3.
+   forbidden by *both* halves of §7 step 3 — the links must agree on `ledger`,
+   and the serving Ledger must be the one they agree on. The second half is what
+   does the work here: without it the question answers itself in the worst way,
+   since a chain naming B is simply accepted by A and the "forbidden" case is the
+   supported one.
 2. **Escrow release incentives.** Under `escrow_schema` the payer decides whether
    it pays. Dual-signed receipts make a dishonest verdict adjudicable but do not
    prevent it. See §12.3 — this is the largest unresolved gap in the design.

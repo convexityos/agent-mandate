@@ -371,9 +371,17 @@ async function replay(flags: Args['flags'], out: (s: string) => void): Promise<n
   }
   if (!Array.isArray(spends)) throw new UsageError('--spends must be a JSON array');
 
+  // The simulated ledger answers as the one the chain names. A placeholder here
+  // would be refused by `reserve`'s §7 step 3 check on every chain there is, and
+  // rightly — the question `replay` answers is "what would *my* ledger let
+  // through", so adopting the chain's own `ledger` is the only reading of it.
+  // Same inheritance, and the same reason for it, as `attenuate` above.
+  const rootClaims = parseCompactJws(tokens[0]!)?.payload as unknown as MandateClaims | undefined;
+  if (rootClaims?.ledger === undefined) throw new UsageError('the chain does not parse');
+
   let clock = now(flags);
   const ledger = new Ledger({
-    url: 'https://ledger.invalid',
+    url: rootClaims.ledger,
     key: generateAgentKey(),
     store: new MemoryLedgerStore(() => clock),
     isTrustedRootIssuer: (iss) => iss === trust,
