@@ -28,6 +28,7 @@
     "@noble/hashes": "^1.8.0"
   },
   "bin": {
-    "am": "./bin/am.mjs"
+    "am": "./bin/am.mjs",
+    "am-hook": "./bin/am-hook.mjs"
   }
 }

@@ -16,6 +16,7 @@ export * from './ledger/store.js';
 export * from './ledger/breakers.js';
 export * from './ledger/ledger.js';
 export * from './ledger/reconciler.js';
+export * from './harness/hook.js';
 export * from './rail/rail.js';
 export * from './rail/x402.js';
 export * from './http/index.js';

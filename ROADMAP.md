@@ -26,7 +26,7 @@ ordering below rather than for any particular item in it.
 | Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler, HTTP service | — |
 | Settlement | custodial + non-custodial x402, card/ACH-shaped rail, EIP-712/3009, `authorizationState` | escrow (deliberately — see triage) |
 | Transport | §14 binding, merchant verifier, agent client, `mandatedFetch` | — |
-| Agents | signer, directive execution, MCP mandate gateway | harness integration |
+| Agents | signer, directive execution, MCP mandate gateway, PreToolUse/PostToolUse hook | — |
 | Humans | signed step-up and control decisions, approval queue, principal console | — |
 
 The pattern: every seam is defined and every seam terminates in an in-memory
@@ -266,12 +266,39 @@ Two things building it settled:
   quote-derived key makes the *mint* idempotent — the failure §9 exists for —
   and the abandoned reservation is cleaned up by expiry rather than by replay.
 
-### 2.3 Harness integration
+### 2.3 Harness integration — **done**
 
-A `PreToolUse` hook for Claude Code / the Agent SDK that reserves against a
-mandate before a priced tool fires and refunds when it fails. Small, and it makes
-the control plane something that runs in the loop you already use rather than
-something you demo.
+[`src/harness/hook.ts`](src/harness/hook.ts) and
+[`bin/am-hook.mjs`](bin/am-hook.mjs). `PreToolUse` reserves before a priced tool
+fires; `PostToolUse` settles or refunds when it returns.
+
+**The default is the opposite of the gateway's, deliberately.** The gateway *is*
+the channel to a wrapped server, so an unpriced tool is refused — an agent cannot
+call what it was never shown. The hook sits in front of *every* tool the harness
+has, including reading files, so refusing everything unpriced would not be a
+spending control, it would be an outage. Unpriced tools pass through untouched
+and the hook meters exactly what it is told to meter. Claude Code already has a
+permission system; this is not it.
+
+Three things worth keeping:
+
+- **A step-up is `ask`, not `deny`.** The answer is "a human has to say yes", and
+  the harness already knows how to put that in front of one. Denying tells the
+  model to give up on something one approval away.
+- **`mcp__server__tool` folds onto `mcp://server/tool`**, the same URI the
+  gateway uses, so one `resources` caveat covers a tool whether it was reached
+  through the gateway or straight from the harness.
+- **One correlation file per in-flight call.** Pre and Post are separate
+  processes, so the reservation has to be written down; a single shared file
+  would lose concurrent calls to a read-modify-write race.
+
+The bug that only showed up by running the binary: **stderr is a channel, not a
+log.** On a block the harness reads stderr as the reason it shows the model, and
+loading `node:sqlite` prints an ExperimentalWarning to the same stream —
+`process.on('warning')` does not suppress it, and a shebang cannot portably pass
+`--no-warnings`. Without the fix the model gets a refusal with a Node warning
+stapled to it. There is a spawn-based test for it, because nothing inside the
+module can observe it.
 
 ### 2.4 A capability axis in the registry — **done**
 
@@ -452,12 +479,11 @@ a spend that needed a human was the first thing to walk straight through.
 All three exist, and §1.3 and §5.2 with them. §5 is closed: the principal is no
 longer the only party in the protocol without an interface.
 
-**Section 1 is complete.** The honest shortlist from here is §2.3 (the harness
-hook — a `PreToolUse` hook for Claude Code, now that `mandatedFetch` and the MCP
-gateway have done the hard parts), §3.2 (revocation distribution, roughly a day's
-work and the thing offline mode currently bounds only by `exp`), and §3.3 (the
-threat catalogue, which is the last piece of §3 and now has a conformance suite
-to point its entries at).
+**Sections 1 and 2 are complete.** What is left is §3: §3.2 (revocation
+distribution — roughly a day's work, and the thing offline mode currently bounds
+only by `exp`) and §3.3 (the threat catalogue, which now has a conformance suite
+to point its entries at). After that the open questions in §4 that were marked
+*build* — quote binding, AP2/ACP interop, and salted-hash paths in receipts.
 
 One thing this pass exposed that is not on the list anywhere: **there is no
 migration story.** `CREATE TABLE IF NOT EXISTS` does nothing to a table that

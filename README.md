@@ -57,6 +57,7 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/mcp/gateway.ts`](src/mcp/gateway.ts) | MCP mandate gateway — a mandate per tool call, wrapped server unmodified |
 | [`src/mcp/jsonrpc.ts`](src/mcp/jsonrpc.ts) | JSON-RPC 2.0 and the stdio framer, hand-rolled |
 | [`src/mcp/stdio.ts`](src/mcp/stdio.ts) | stdio transport: spawn an upstream server, serve a client |
+| [`src/harness/hook.ts`](src/harness/hook.ts) | §2.3 — PreToolUse/PostToolUse hook: reserve before a priced tool, settle after |
 
 The split to keep in mind: **`verifyChain` decides whether a chain *may*
 authorize a request. The `Ledger` decides whether the budget is still there.**
@@ -193,6 +194,47 @@ radius axis: price is not a proxy for consequence.
 A tool with no entry in `tools` is not callable **and is not listed** — the
 gateway will not price a call it cannot classify, and an agent cannot misuse a
 tool it was never shown.
+
+### Metering the tools your agent already has
+
+The MCP gateway covers tools reached *through* it. The hook covers every tool the
+harness has, including ones configured directly. Build once, then in
+`~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse":  [{ "matcher": "*", "hooks": [{ "type": "command", "command": "node /path/to/agentic/bin/am-hook.mjs" }] }],
+    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "node /path/to/agentic/bin/am-hook.mjs" }] }]
+  },
+  "env": { "AM_HOOK_CONFIG": "/path/to/am-hook.json" }
+}
+```
+
+`am-hook.json` names the mandate, a durable store, and what each tool costs:
+
+```json
+{
+  "tokens": ["eyJ…"],
+  "stateDir": "/home/you/.claude/am-hook",
+  "store": { "kind": "sqlite", "location": "/home/you/.claude/am.db" },
+  "ledgerKeySeed": "…64 hex chars…",
+  "trustedRootIssuer": "did:key:z6Mk…",
+  "prices": {
+    "mcp__public-com__get_quotes":  { "price": {"cur":"USD","amt":"0.01"}, "effect": "read" },
+    "mcp__public-com__place_order": { "price": {"cur":"USD","amt":"0.01"}, "effect": "irreversible" }
+  }
+}
+```
+
+**Tools you do not price are not metered and not blocked.** That is the opposite
+of the gateway's default and it is deliberate: this hook fronts every tool
+including file reads, so refusing the unpriced would be an outage rather than a
+control. Claude Code already has a permission system — this decides whether a
+spend fits a budget the principal granted.
+
+A step-up returns `ask` rather than `deny`, because the answer is "a human has to
+say yes" and the harness knows how to put that question in front of one.
 
 ### Letting a human say no
 
