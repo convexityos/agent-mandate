@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'depth_exceeded'
   | 'mandate_expired'
   | 'mandate_revoked'
+  | 'status_unknown'
   | 'pop_failed'
   | 'resource_not_covered'
   | 'audience_mismatch'
@@ -31,6 +32,12 @@ export const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   depth_exceeded: 403,
   mandate_expired: 403,
   mandate_revoked: 403,
+  // 503, not 403. "This mandate is revoked" and "I could not find out whether
+  // this mandate is revoked" are different facts, and only the first is a
+  // decision about the credential. Collapsing them onto 403 tells an agent to
+  // stop presenting a chain that is very likely fine, and hides a status-list
+  // outage inside a wall of ordinary refusals.
+  status_unknown: 503,
   pop_failed: 401,
   resource_not_covered: 403,
   audience_mismatch: 403,

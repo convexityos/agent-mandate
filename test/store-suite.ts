@@ -73,6 +73,7 @@ function fixtureNode(over: Partial<MandateNode> = {}): MandateNode {
     rate: null,
     rateEvents: [],
     revoked: false,
+    statusIdx: null,
     exp: NOW + 3600,
     ...over,
   };
@@ -171,7 +172,9 @@ export function runStoreSuite(h: StoreHarness): void {
             rate: { n: 5, per: 'PT1H' },
             rateEvents: [NOW - 10, NOW - 5, NOW],
           }),
-          fixtureNode({ jti: 'mnd_c', revoked: true, parent: 'mnd_root' }),
+          fixtureNode({ jti: 'mnd_c', revoked: true, parent: 'mnd_root', statusIdx: 0 }),
+          // Large enough to prove the column is not a 32-bit int somewhere.
+          fixtureNode({ jti: 'mnd_f', statusIdx: 131_071 }),
           // Credits can drive a node negative if a refund outruns its debit.
           fixtureNode({ jti: 'mnd_d', spentScaled: -42n }),
           // Beyond int64 at scale 9 — the reason amount columns are not BIGINT.
@@ -325,6 +328,35 @@ export function runStoreSuite(h: StoreHarness): void {
         // The store is still usable after a rollback.
         await store.transact(async (tx) => tx.putNode(fixtureNode({ jti: 'mnd_after' })));
         expect(await store.read(async (tx) => tx.getNode('mnd_after'))).toBeDefined();
+      });
+    });
+
+    it('records a revocation for a jti with no node, scoped to its root', async () => {
+      await withStore(at, async (store) => {
+        // The case the record exists for: nothing has ever been spent under
+        // this mandate, so there is no node to carry a `revoked` flag.
+        expect(await store.read(async (tx) => tx.isRevoked('mnd_root', 'mnd_unseen'))).toBe(false);
+        await store.transact(async (tx) => tx.putRevocation('mnd_root', 'mnd_unseen', NOW));
+        expect(await store.read(async (tx) => tx.isRevoked('mnd_root', 'mnd_unseen'))).toBe(true);
+
+        // Scoped by root: the same jti under someone else's root is untouched,
+        // which is the check that cannot be made against a node that does not
+        // exist yet.
+        expect(await store.read(async (tx) => tx.isRevoked('mnd_other', 'mnd_unseen'))).toBe(false);
+
+        // Idempotent — a principal re-sending a revocation is not an error.
+        await store.transact(async (tx) => tx.putRevocation('mnd_root', 'mnd_unseen', NOW + 5));
+        expect(await store.read(async (tx) => tx.isRevoked('mnd_root', 'mnd_unseen'))).toBe(true);
+
+        await expect(
+          store.transact(async (tx) => {
+            await tx.putRevocation('mnd_root', 'mnd_rolled_back', NOW);
+            throw new Error('abort');
+          }),
+        ).rejects.toThrow('abort');
+        expect(await store.read(async (tx) => tx.isRevoked('mnd_root', 'mnd_rolled_back'))).toBe(
+          false,
+        );
       });
     });
 

@@ -50,6 +50,7 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/agent/directive.ts`](src/agent/directive.ts) | Verify a ledger directive, then sign it |
 | [`src/stepup.ts`](src/stepup.ts) | §10.5 — decisions signed by the principal, terms restated inside the signature |
 | [`src/control.ts`](src/control.ts) | §10.6 — signed kill / release / revoke, with a one-time nonce |
+| [`src/status.ts`](src/status.ts) | §10.3.1 — signed bitstring status lists, and the merchant-side cache |
 | [`src/http/approval.ts`](src/http/approval.ts) | The approval queue and approve/deny, framework-agnostic |
 | [`src/http/service.ts`](src/http/service.ts) | §1.2 — the ledger as a service: mint, settle, refund, control, metrics |
 | [`src/http/serve.ts`](src/http/serve.ts) | `node:http` binding, so the handlers are a daemon rather than a library |
@@ -310,6 +311,59 @@ Pass an `audit` sink to the `Ledger` for a structured log of every state
 transition, keyed by `spendId`. It belongs on the ledger rather than the service
 because the transitions that matter most are the ones the reconciler makes with
 no request to attribute them to.
+
+### Revoking a mandate an offline merchant is holding
+
+Online, revocation is free: the ledger is on the spend path, so the next spend is
+refused. Offline (§13) it reaches nobody, which is why §13 bounds revocation by
+`exp` and caps `exp` at an hour.
+
+A **status list** closes that. One bit per mandate under a root, gzipped, signed
+with the same key that signs spend tokens, served at
+`{ledger}/v1/status/{root_jti}`:
+
+```ts
+import { StatusListCache, statusListUri, verifyChain } from './src/index.js';
+
+const status = new StatusListCache({
+  ledgerJwk,
+  clock: () => Math.floor(Date.now() / 1000),
+  fetch: async (uri) => (await fetch(uri)).text(),
+});
+
+// Off the spend path — on the 60-second heartbeat §13 already requires.
+setInterval(() => void status.refresh(statusListUri(LEDGER, root)), 60_000);
+
+// On the spend path: a synchronous read of a cached bitstring, no network.
+const verdict = await verifyChain(tokens, {
+  now, request, isTrustedRootIssuer,
+  status: status.source(),
+  requireStatus: true,   // refuse anything you could not later revoke
+});
+```
+
+A mandate opts in by carrying `st`, its index in the list. That claim is
+additive: a mandate minted before status lists existed carries none, means "not
+revocable offline", and verifies exactly as it did. `requireStatus` is how a
+merchant says that is no longer an acceptable answer.
+
+Three things worth knowing:
+
+- **The list URI is derived, never declared.** It comes from the `ledger` claim
+  every link already agrees on plus the root `jti`. An issuer that could name its
+  own status URI could point it at a host it controls and answer "not revoked"
+  forever.
+- **It fails closed.** A chain carrying `st` that cannot be checked is refused
+  with `status_unknown` — a 503, not a 403, because "I could not find out" is not
+  "this is revoked". A cache whose refresh is failing keeps serving what it has
+  until that list's own `exp`, and then starts refusing.
+- **Register offline mandates at issuance.** `POST /ledger/v1/register` (or
+  `ledger.register(tokens)`) materializes a chain without spending against it.
+  Without it, a mandate the ledger has never seen has no recorded status index,
+  so revoking it cannot reach the merchant holding it.
+
+This does not license a longer `exp`. The one-hour cap also bounds worst-case
+parallel presentation, and a status list does nothing about that.
 
 ### The principal console
 
@@ -699,13 +753,19 @@ There are 52 published conformance vectors, and they have teeth: swapping the
 verifier to compare each link against its immediate parent — the natural-looking
 implementation — fails exactly the two vectors that name that defect.
 
-Ledger state is now durable — SQLite and Postgres, with the concurrency
-properties run against real row locks rather than a `Map` — the MCP gateway puts
-a mandate in front of real tool calls, a step-up needs a signature from the
-principal rather than the handle the agent was just handed, a reconciler resolves
-stuck settlements and escalates the ones it cannot, and the principal has a
-console with a working kill switch. Still missing: a ledger *service*, and
-conformance vectors a third party could run.
+Ledger state is durable — SQLite and Postgres, with the concurrency properties
+run against real row locks rather than a `Map` — the MCP gateway and the
+PreToolUse hook put a mandate in front of real tool calls, a step-up needs a
+signature from the principal rather than the handle the agent was just handed, a
+reconciler resolves stuck settlements and escalates the ones it cannot, the
+ledger runs as a daemon with idempotency inside the debit transaction, and the
+principal has a console with a working kill switch. Revocation propagates to
+offline merchants through signed status lists rather than waiting out `exp`.
+
+Still missing: the §16 threat catalogue as one entry per attack with a test id,
+and the §18 open questions marked *build* in the roadmap — quote binding, AP2/ACP
+interop, salted-hash paths in receipts. Escrow is deliberately absent; every path
+through it ends with the ledger holding the float.
 
 No payment has ever been made from this codebase and no funded key has ever been
 loaded into it. Every network test is a read-only `eth_call` or a testnet

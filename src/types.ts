@@ -18,6 +18,22 @@ export interface MandateClaims {
   cnf: { jkt: string };
   ledger: string;
   cav: Caveats;
+  /**
+   * §10.3 — this mandate's index in its root's status list, for offline
+   * revocation.
+   *
+   * Optional, and additive per §17.3: a mandate minted before this claim existed
+   * verifies exactly as it did, because absence means only "not revocable
+   * offline". A verifier that requires offline revocability says so explicitly
+   * (`requireStatus`) rather than having the default quietly change under
+   * credentials already in the wild.
+   *
+   * Deliberately *not* a caveat. It carries no authority, participates in no
+   * lattice, and a child does not inherit its parent's — revoking a subtree
+   * needs only the ancestor listed, because §7 checks the status of every link
+   * on the path anyway.
+   */
+  st?: number;
 }
 
 export interface RequestContext {

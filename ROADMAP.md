@@ -24,6 +24,7 @@ ordering below rather than for any particular item in it.
 | Semantics | full §6.2 comparator table incl. the `effect` axis, `meet`, `narrows`, pattern containment | — |
 | Verification | §7 chain verification against the accumulated meet, 52 published conformance vectors | — |
 | Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler, HTTP service | — |
+| Revocation | §10.3 online, signed bitstring status lists for offline, merchant cache, pre-materialization revoke | — |
 | Settlement | custodial + non-custodial x402, card/ACH-shaped rail, EIP-712/3009, `authorizationState` | escrow (deliberately — see triage) |
 | Transport | §14 binding, merchant verifier, agent client, `mandatedFetch` | — |
 | Agents | signer, directive execution, MCP mandate gateway, PreToolUse/PostToolUse hook | — |
@@ -355,14 +356,67 @@ The vectors deliberately stop at stateless verification. `max_total` and `rate`
 are ledger state, and a vector for them would have to ship an initial and
 expected ledger — a different, larger format.
 
-### 3.2 Revocation distribution
+### 3.2 Revocation distribution — **done**
 
-§10.3 revokes in the ledger's own state and nothing propagates it. Online mode
-tolerates that because the ledger is on the spend path; offline mode (§13) does
-not, and bounds revocation only by `exp` — which is the stated justification for
-the one-hour cap.
+[`src/status.ts`](src/status.ts) — a signed, gzipped bitstring status list, one
+per root, plus the merchant-side cache that consumes it and the
+`GET /v1/status/:root` endpoint that serves it. Revocation latency at an offline
+merchant stops being the mandate's `exp` and becomes the list's lifetime.
 
-A bitstring status list is the standard answer and is roughly a day's work.
+**It costs no connectivity the merchant did not already owe.** §13 already
+requires reporting consumption to the ledger every 60 seconds, so the list rides
+that heartbeat. Offline mode stays offline: `refresh` is off the spend path,
+`get` is a synchronous read of a cached bitstring. What it does *not* license is
+a longer `exp` — that cap also bounds parallel-presentation loss, which a status
+list does nothing about.
+
+**The list URI is derived, not declared.** `{ledger}/v1/status/{root_jti}`, from
+two things the chain has already agreed on. A `status_uri` claim would have let
+an issuer point at a host it controls and answer "not revoked" forever; there is
+nothing to lie about if there is nothing to declare.
+
+Two things building it turned up, one of them a bug that was already there:
+
+- **A mandate that had never been spent could not be revoked.** Consumption state
+  materializes on first presentation, revocation lived on that state, so
+  `applyControl` refused a target with no node as "unknown mandate" — and the
+  first spend then created the node with `revoked: false` and went through. The
+  window was the whole life of the mandate up to its first use. Revocation is now
+  a record of its own, keyed by root because an unmaterialized `jti` has no
+  recorded parent to check a subtree claim against, and a node created later
+  inherits it. `Ledger.register` exists for the same reason from the other end:
+  an offline mandate the ledger has never seen has no recorded status index, so
+  revoking it could not reach the merchant holding it.
+- **`seq` from a wall clock is wrong twice.** It was, at first. Two lists
+  published in the same second share a number, so a revocation between them does
+  not propagate; and a replica lagging on replication publishes a *newer*
+  timestamp over a *smaller* revocation set, which is precisely the rollback the
+  counter exists to prevent. `seq` counts revocations instead — one-way, so it
+  only rises, and two lists that agree on it agree on every bit. That in turn
+  forced the consumer rule to be "refuse *below*, accept *equal*": refusing an
+  equal `seq` would discard every successful refresh of a quiet root and expire
+  the merchant's cache five minutes later with nothing wrong.
+
+The rest is the ordering rules, each of which is a test:
+
+- **Signature before decompression.** A status list is a compressed blob fetched
+  over a network, and `gunzip` on unauthenticated input is a memory-exhaustion
+  primitive. The declared `bits` then caps the inflated size, and a payload
+  short of it is refused too — that is the dangerous direction, because a
+  truncated bitstring reads as "nothing is revoked".
+- **Build by union, never per-mandate.** If two mandates share an index, writing
+  each node's bit from its own state lets the unrevoked one clear the revoked
+  one's. Union makes a collision cost a needless refusal instead of a missed one.
+- **Fail closed.** A chain carrying `st` that cannot be checked is refused with
+  `status_unknown`, a 503 rather than a 403 — "I could not find out" is not "this
+  is revoked". Anything else makes breaking the fetch the way to bypass the
+  check.
+
+Checked rather than assumed, in the house style: each of those five reverted, and
+the suite goes red at exactly the test that names it. The end-to-end runs over
+real HTTP — register, revoke, publish, refuse — and both stores were verified
+against a database created *before* the new column and table existed, which is
+the migration check the last schema change did not get until it broke.
 
 ### 3.3 Threat catalog
 
@@ -479,18 +533,20 @@ a spend that needed a human was the first thing to walk straight through.
 All three exist, and §1.3 and §5.2 with them. §5 is closed: the principal is no
 longer the only party in the protocol without an interface.
 
-**Sections 1 and 2 are complete.** What is left is §3: §3.2 (revocation
-distribution — roughly a day's work, and the thing offline mode currently bounds
-only by `exp`) and §3.3 (the threat catalogue, which now has a conformance suite
-to point its entries at). After that the open questions in §4 that were marked
-*build* — quote binding, AP2/ACP interop, and salted-hash paths in receipts.
+**Sections 1 and 2 are complete, and §3.2 with them.** What is left is §3.3, the
+threat catalogue — which now has a conformance suite to point its entries at, and
+a §16 table that grew five rows building the status list. After that the open
+questions in §4 that were marked *build* — quote binding, AP2/ACP interop, and
+salted-hash paths in receipts.
 
-One thing this pass exposed that is not on the list anywhere: **there is no
+One thing an earlier pass exposed that is not on the list anywhere: **there is no
 migration story.** `CREATE TABLE IF NOT EXISTS` does nothing to a table that
 already exists, so the §10.5 columns would have hard-failed every deployment that
 predated them. Both SQL stores now apply additive columns idempotently, which is
 a stopgap and not a framework — no version table, no rename, no backfill. The
-next schema change that is not purely additive needs one.
+next schema change that is not purely additive needs one. §3.2 added a column and
+a table and was checked against a pre-existing database of each dialect before
+being called done, which is the discipline the stopgap needs to survive.
 
 Two deliberately excluded from the sequence:
 

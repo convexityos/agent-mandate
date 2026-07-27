@@ -140,9 +140,17 @@ CREATE TABLE IF NOT EXISTS mandate_node (
   rate          TEXT,
   rate_events   TEXT NOT NULL,
   revoked       BOOLEAN NOT NULL,
+  status_idx    BIGINT,
   exp           BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS mandate_node_root ON mandate_node (root);
+
+CREATE TABLE IF NOT EXISTS revocation (
+  root TEXT NOT NULL,
+  jti  TEXT NOT NULL,
+  at   BIGINT NOT NULL,
+  PRIMARY KEY (root, jti)
+);
 
 CREATE TABLE IF NOT EXISTS reservation (
   id            TEXT PRIMARY KEY,
@@ -217,7 +225,8 @@ CREATE TABLE IF NOT EXISTS idempotency (
 -- semantics any handle was spendable, so carrying those rows forward as approved
 -- would carry the self-approval hole forward with them. Old handles stop
 -- working, and a human can still approve one.
-ALTER TABLE mandate_node ADD COLUMN IF NOT EXISTS issuer TEXT NOT NULL DEFAULT '';
+ALTER TABLE mandate_node ADD COLUMN IF NOT EXISTS issuer     TEXT NOT NULL DEFAULT '';
+ALTER TABLE mandate_node ADD COLUMN IF NOT EXISTS status_idx BIGINT;
 ALTER TABLE step_up ADD COLUMN IF NOT EXISTS state        TEXT   NOT NULL DEFAULT 'pending';
 ALTER TABLE step_up ADD COLUMN IF NOT EXISTS requested_at BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE step_up ADD COLUMN IF NOT EXISTS agent        TEXT   NOT NULL DEFAULT '';
@@ -231,6 +240,7 @@ CREATE INDEX IF NOT EXISTS step_up_queue ON step_up (state, requested_at);
 
 export const TABLES = [
   'mandate_node',
+  'revocation',
   'reservation',
   'spend_history',
   'task_total',
@@ -346,8 +356,8 @@ export class PostgresStore implements LedgerStore {
         await c.query(
           `INSERT INTO mandate_node
              (jti, parent, root, issuer, token_hash, budget_scaled, currency,
-              spent_scaled, rate, rate_events, revoked, exp)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+              spent_scaled, rate, rate_events, revoked, status_idx, exp)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            ON CONFLICT (jti) DO UPDATE SET
              parent = EXCLUDED.parent,
              root = EXCLUDED.root,
@@ -359,6 +369,7 @@ export class PostgresStore implements LedgerStore {
              rate = EXCLUDED.rate,
              rate_events = EXCLUDED.rate_events,
              revoked = EXCLUDED.revoked,
+             status_idx = EXCLUDED.status_idx,
              exp = EXCLUDED.exp`,
           [
             r['jti'],
@@ -372,6 +383,7 @@ export class PostgresStore implements LedgerStore {
             r['rate'],
             r['rate_events'],
             r['revoked'],
+            r['status_idx'],
             r['exp'],
           ],
         );
@@ -392,6 +404,29 @@ export class PostgresStore implements LedgerStore {
            ON CONFLICT (nonce) DO NOTHING
            RETURNING nonce`,
           [nonce, expiresAt],
+        );
+        return rows.length > 0;
+      },
+
+      /**
+       * Under the caller's node lock, not one of its own.
+       *
+       * Every writer of a revocation for `jti` — `applyControl` setting one, a
+       * materializing path walk reading one — has already taken `lockNode(jti)`,
+       * so the ordering is the same root-to-leaf ordering everything else uses.
+       * A second lock class here would be a second order to deadlock against.
+       */
+      putRevocation: async (root, jti, at) => {
+        await c.query(
+          'INSERT INTO revocation (root, jti, at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+          [root, jti, at],
+        );
+      },
+
+      isRevoked: async (root, jti) => {
+        const { rows } = await c.query(
+          'SELECT 1 FROM revocation WHERE root = $1 AND jti = $2',
+          [root, jti],
         );
         return rows.length > 0;
       },

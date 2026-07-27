@@ -217,6 +217,12 @@ consumption decisions.
 | `cnf.jkt` | MUST | JWK SHA-256 thumbprint (RFC 7638) of the holder's public key |
 | `ledger` | MUST | Ledger base URL. All links in a chain **MUST** agree. |
 | `cav` | MUST | Caveat object (§6). MAY be empty `{}`, meaning unbounded. |
+| `st` | MAY | Non-negative integer index into this root's status list (§10.3.1). Absent means "not revocable offline" and asserts nothing about validity. Not a caveat: it carries no authority, participates in no lattice, and is not inherited. |
+
+Unknown top-level claims reject the chain, so an implementation that predates a
+claim refuses a mandate carrying it. That is the safe direction — a mandate
+stored before `st` existed verifies exactly as it did, and a verifier too old to
+understand one declines rather than ignoring it (§17.3).
 
 ### 5.2 Proof of possession
 
@@ -627,6 +633,80 @@ In online mode this is instant and free, because the Ledger is already in the pa
 This is a significant advantage of online mode and implementations **SHOULD** treat
 offline mode's weaker revocation story (§13) as the exception requiring
 justification.
+
+**A mandate that has never been presented is still revocable.** Consumption
+state materializes on first presentation (§10.1), so a Ledger that stores
+revocation *on that state* cannot record one for a mandate it has not seen — and
+the first spend then creates the node unrevoked and goes through. A Ledger
+**MUST** therefore keep revocation independent of materialization, and a node
+created later **MUST** inherit it. Because an unmaterialized `jti` has no
+recorded parent, the record is scoped to the `root` named in the control action
+(§10.6): a principal may pre-revoke anything that turns out to be under their own
+root, and nothing else.
+
+#### 10.3.1 Status lists
+
+An offline merchant (§13) is not on the Ledger's spend path and learns nothing
+from Ledger-side revocation. A Ledger **MAY** publish a **status list**: one bit
+per mandate under a root, gzipped, base64url-encoded, and signed with the same
+key that signs Spend Tokens.
+
+```json
+{
+  "v": "am/1", "typ": "status",
+  "iss": "https://ledger.example.com",
+  "sub": "mnd_01J8XQ...",
+  "seq": 3,
+  "iat": 1770001200, "exp": 1770001500,
+  "bits": 131072, "enc": "gzip",
+  "list": "H4sIAAAAAAAA…"
+}
+```
+
+A mandate opts in by carrying `st`, a non-negative integer index (§5.1). Absence
+means only "not revocable offline"; it is not an assertion of validity.
+
+The list URI is **`{ledger}/v1/status/{root_jti}`** and is **derived, never
+declared**. Both parts are already agreed by the chain — every link **MUST** name
+the same `ledger` (§7), and the root `jti` heads the path — so an issuer has
+nothing left to point at a host it controls that would answer "not revoked"
+forever.
+
+Bit *i* is byte `i >> 3`, most significant bit first, matching W3C Bitstring
+Status List.
+
+Requirements on a consumer, each of which closes an attack that `exp` alone does
+not:
+
+1. **Verify the signature before decompressing.** The payload is compressed and
+   attacker-reachable; `gunzip` on unauthenticated input is a memory-exhaustion
+   primitive. The declared `bits` then caps the inflated size, and a payload that
+   decompresses to any other length **MUST** be refused — short is the dangerous
+   direction, because the missing tail reads as "nothing is revoked".
+2. **Refuse an expired list.** `exp` is mandatory. Whoever answers the fetch can
+   otherwise serve one document forever and revocation silently stops
+   propagating.
+3. **Never accept a lower `seq` than one already held for that `sub`.** An older
+   list that has not yet expired is a perfectly valid document, and serving it
+   un-revokes everything revoked since. An *equal* `seq` **MUST** be accepted:
+   `seq` counts revocations, so a quiet root republishes the same number, and
+   discarding those refreshes would expire the consumer's cache while nothing was
+   wrong.
+4. **Fail closed.** A chain carrying `st` that cannot be checked is refused with
+   `status_unknown` (§15) — a 503, because "I could not find out" is not "this is
+   revoked". Failing open would make breaking the fetch the way to bypass the
+   check.
+
+A Ledger **MUST** build the list as the **union** of its revoked indices rather
+than by writing each mandate's bit from its own state. If two mandates share an
+index — an issuer allocation bug — the union costs an unnecessary refusal, while
+per-mandate writes let an unrevoked mandate clear a revoked one's bit in whatever
+order the rows arrive.
+
+Revocation latency becomes the list's lifetime rather than the mandate's `exp`.
+§13 already requires the merchant to contact the Ledger every 60 seconds, so a
+list refreshed on that heartbeat costs no connectivity the merchant did not
+already owe — but see §13, which is why this does not license a longer `exp`.
 
 ### 10.4 Circuit breakers
 
@@ -1178,8 +1258,17 @@ offline `max_total` values across all merchants named in live offline mandates.
 Implementations **MUST** surface this figure to the principal as a configured risk
 budget rather than leaving it implicit.
 
-Revocation in offline mode is bounded only by `exp`. This is the principal
-justification for the one-hour cap.
+Revocation in offline mode is bounded only by `exp` unless the merchant consults
+a status list (§10.3.1), which replaces that bound with the list's own lifetime.
+A merchant doing so **MUST** refresh off the spend path — the point of offline
+mode is that settling touches no network — and **SHOULD** refresh on the same
+60-second heartbeat requirement 5 already imposes, which costs it no connectivity
+it did not already owe.
+
+This does **not** license a longer `exp`. The one-hour cap bounds two different
+losses, and a status list addresses only one of them: worst-case parallel
+presentation is still the sum of live offline `max_total`s, and nothing about
+revocation changes that.
 
 ---
 
@@ -1273,6 +1362,7 @@ Returned as `application/problem+json` (RFC 9457) with `type`
 | `depth_exceeded` | 403 | Delegation deeper than permitted |
 | `mandate_expired` | 403 | Outside the effective validity window |
 | `mandate_revoked` | 403 | A link in the path is revoked |
+| `status_unknown` | 503 | A link claims a status list entry that could not be checked (§10.3.1) |
 | `pop_failed` | 401 | Request signature does not match `cnf.jkt` |
 | `resource_not_covered` | 403 | Resource outside `resources` |
 | `audience_mismatch` | 403 | Host outside `aud`, or token `aud` ≠ merchant |
@@ -1311,6 +1401,11 @@ Returned as `application/problem+json` (RFC 9457) with `type`
 | Agent falsely reports payment | Settlement confirmed by chain read, never by the report (§12.4.5) |
 | Agent bypasses the Ledger entirely | **Not preventable non-custodially.** Detected by payer-account reconciliation (§12.4.7) |
 | Cross-merchant parallel spend | Online: Ledger is authoritative. Offline: per-merchant caps bound loss (§13) |
+| Status-list rollback un-revoking a mandate | Consumer refuses any `seq` below one already held for that `sub` (§10.3.1) |
+| Status list pinned to hide a revocation | `exp` is mandatory and a stale list is refused rather than served (§10.3.1) |
+| Status list as a decompression bomb | Signature verified before `gunzip`; declared `bits` caps the inflated size (§10.3.1) |
+| Blocking the status fetch to bypass the check | A chain carrying `st` that cannot be checked is refused, not admitted (§10.3.1) |
+| Spending a mandate revoked before its first use | Revocation is recorded independently of materialization and inherited by the node (§10.3) |
 | Key compromise at depth *n* | Blast radius limited to that subtree's caveats; short `exp` + subtree revoke |
 | Retry-storm griefing | `rate` caveat enforced at every ancestor + burn-rate breaker (§10.4) |
 | Clock skew abuse | ±60s hard tolerance; Ledger clock authoritative online (§4.5) |

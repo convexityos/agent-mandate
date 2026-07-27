@@ -1,6 +1,7 @@
 import type { ErrorCode } from '../errors.js';
 import type { Ledger, ReserveResult, SettleResult } from '../ledger/ledger.js';
 import type { Money } from '../money.js';
+import { DEFAULT_STATUS_TTL_SECONDS } from '../status.js';
 import type { RequestContext } from '../types.js';
 import type { ApprovalRequest, ApprovalResponse } from './approval.js';
 import { PROBLEM_CONTENT_TYPE, problem } from './problem.js';
@@ -53,6 +54,13 @@ export interface LedgerServiceConfig {
   requirePresenter?: boolean;
   /** Refuse a mint with no `Idempotency-Key`. Defaults to true. */
   requireIdempotencyKey?: boolean;
+  /**
+   * Lifetime stamped into published status lists (§10.3).
+   *
+   * This is the revocation bound for every offline merchant: a mandate revoked
+   * now keeps working until the last list that predates the revocation expires.
+   */
+  statusTtlSeconds?: number;
 }
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
@@ -95,6 +103,8 @@ function isMoney(v: unknown): v is Money {
  *   GET  /v1/spends/:id
  *   GET  /v1/spends/:id/receipt
  *   POST /v1/control             — §10.6, `{ "decision": "<jws>" }`
+ *   POST /v1/register            — §10.1 materialization, `{ "tokens": [...] }`
+ *   GET  /v1/status/:root        — §10.3 status list, signed
  *   GET  /healthz
  *   GET  /metrics
  */
@@ -113,11 +123,66 @@ export class LedgerService {
     if (rest === 'metrics') return this.metrics();
     if (rest === 'v1/mint') return this.mint(req);
     if (rest === 'v1/control') return this.control(req);
+    if (rest === 'v1/register') return this.register(req);
+
+    const status = /^v1\/status\/([^/]+)$/.exec(rest);
+    if (status !== null) return this.status(req, decodeURIComponent(status[1]!));
 
     const spend = /^v1\/spends\/([^/]+)(?:\/(settle|refund|report|receipt))?$/.exec(rest);
     if (spend !== null) return this.spend(req, spend[1]!, spend[2]);
 
     return bad(404, 'not found');
+  }
+
+  // ---------------------------------------------------------------- status
+
+  /**
+   * §10.3 — the root's status list.
+   *
+   * Unauthenticated, and that is the point: it carries its own signature, it
+   * tells a reader nothing they did not already have (a merchant asking about a
+   * root just verified a chain containing it), and the whole mechanism depends
+   * on being reachable from wherever a merchant is. Locking it behind a
+   * credential would leave revocation propagating only to merchants who had one.
+   *
+   * `max-age` tracks the list's own remaining lifetime rather than a fixed
+   * number, so an intermediary cache cannot hold a list past the freshness
+   * bound the signature commits to.
+   */
+  private async status(req: ApprovalRequest, root: string): Promise<ApprovalResponse> {
+    if (req.method !== 'GET') return bad(405, 'method not allowed');
+    const ttl = this.cfg.statusTtlSeconds;
+    const jws = await this.cfg.ledger.publishStatusList(root, {
+      ...(ttl !== undefined ? { ttlSeconds: ttl } : {}),
+    });
+    return {
+      status: 200,
+      headers: {
+        'content-type': 'application/agent-status+jwt',
+        'cache-control': `public, max-age=${ttl ?? DEFAULT_STATUS_TTL_SECONDS}`,
+      },
+      body: jws,
+    };
+  }
+
+  /**
+   * §10.1 — materialize a chain without spending against it.
+   *
+   * Needed before a mandate can be revoked, and needed before it can appear in a
+   * status list at all: a mandate the ledger has never seen has no recorded
+   * index, so revoking it cannot reach a merchant holding it offline. An
+   * offline-mode issuer registers at issuance.
+   */
+  private async register(req: ApprovalRequest): Promise<ApprovalResponse> {
+    if (req.method !== 'POST') return bad(405, 'method not allowed');
+    const body = (req.body ?? {}) as MintBody;
+    if (!Array.isArray(body.tokens) || body.tokens.some((t) => typeof t !== 'string')) {
+      return fail('chain_invalid', 'tokens must be an array of compact JWS strings');
+    }
+    const result = await this.cfg.ledger.register(body.tokens as string[]);
+    return result.ok
+      ? { status: 200, headers: JSON_HEADERS, body: result }
+      : fail(result.code, result.detail);
   }
 
   // ------------------------------------------------------------------ mint

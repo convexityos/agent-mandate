@@ -85,6 +85,7 @@ export function nodeToRow(n: MandateNode): Row {
     rate: n.rate === null ? null : encodeJson(n.rate),
     rate_events: encodeJson(n.rateEvents),
     revoked: n.revoked,
+    status_idx: n.statusIdx,
     exp: n.exp,
   };
 }
@@ -102,6 +103,9 @@ export function rowToNode(r: Row): MandateNode {
     rate: r['rate'] === null ? null : decodeJson(r['rate'] as string),
     rateEvents: decodeJson(r['rate_events'] as string),
     revoked: truthy(r['revoked']),
+    // Absent (an older row) and NULL (minted without `st`) mean the same thing:
+    // not listed, therefore not revocable offline.
+    statusIdx: r['status_idx'] == null ? null : num(r['status_idx']),
     exp: num(r['exp']),
   };
 }

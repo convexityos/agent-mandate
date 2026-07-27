@@ -11,6 +11,8 @@ export interface LinkSpec {
   exp?: number;
   nbf?: number;
   jti?: string;
+  /** §10.3 status-list index. Absent means the link is not revocable offline. */
+  st?: number;
   /** Mutate the claims after construction, to build deliberately invalid chains. */
   tamper?: (c: MandateClaims) => void;
 }
@@ -42,6 +44,7 @@ export function buildChain(issuer: AgentKey, specs: LinkSpec[]): string[] {
       cnf: { jkt: s.holder.jkt },
       ledger: LEDGER,
       cav: s.cav,
+      ...(s.st !== undefined ? { st: s.st } : {}),
     };
     s.tamper?.(claims);
     tokens.push(signMandate(claims, signer, signer.did));

@@ -75,9 +75,17 @@ CREATE TABLE IF NOT EXISTS mandate_node (
   rate          TEXT,
   rate_events   TEXT NOT NULL,
   revoked       INTEGER NOT NULL,
+  status_idx    INTEGER,
   exp           INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS mandate_node_root ON mandate_node (root);
+
+CREATE TABLE IF NOT EXISTS revocation (
+  root TEXT NOT NULL,
+  jti  TEXT NOT NULL,
+  at   INTEGER NOT NULL,
+  PRIMARY KEY (root, jti)
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS reservation (
   id            TEXT PRIMARY KEY,
@@ -167,7 +175,10 @@ export class SqliteStore implements LedgerStore {
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA busy_timeout = 5000');
     this.db.exec(SCHEMA);
-    this.addMissingColumns('mandate_node', [['issuer', "TEXT NOT NULL DEFAULT ''"]]);
+    this.addMissingColumns('mandate_node', [
+      ['issuer', "TEXT NOT NULL DEFAULT ''"],
+      ['status_idx', 'INTEGER'],
+    ]);
     this.addMissingColumns('step_up', [
       ['state', "TEXT NOT NULL DEFAULT 'pending'"],
       ['requested_at', 'INTEGER NOT NULL DEFAULT 0'],
@@ -240,8 +251,8 @@ export class SqliteStore implements LedgerStore {
       this.run(
         `INSERT INTO mandate_node
            (jti, parent, root, issuer, token_hash, budget_scaled, currency,
-            spent_scaled, rate, rate_events, revoked, exp)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            spent_scaled, rate, rate_events, revoked, status_idx, exp)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(jti) DO UPDATE SET
            parent = excluded.parent,
            root = excluded.root,
@@ -253,6 +264,7 @@ export class SqliteStore implements LedgerStore {
            rate = excluded.rate,
            rate_events = excluded.rate_events,
            revoked = excluded.revoked,
+           status_idx = excluded.status_idx,
            exp = excluded.exp`,
         [
           r['jti'],
@@ -266,6 +278,7 @@ export class SqliteStore implements LedgerStore {
           r['rate'],
           r['rate_events'],
           r['revoked'],
+          r['status_idx'],
           r['exp'],
         ],
       );
@@ -282,6 +295,17 @@ export class SqliteStore implements LedgerStore {
       this.run('INSERT INTO nonce (nonce, expires_at) VALUES (?, ?)', [nonce, expiresAt]);
       return true;
     },
+
+    putRevocation: async (root, jti, at) => {
+      this.run(
+        'INSERT INTO revocation (root, jti, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+        [root, jti, at],
+      );
+    },
+
+    isRevoked: async (root, jti) =>
+      this.one('SELECT 1 AS hit FROM revocation WHERE root = ? AND jti = ?', [root, jti]) !==
+      undefined,
 
     getIdempotent: async (key) => {
       const r = this.one(

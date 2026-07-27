@@ -19,9 +19,10 @@ import {
   decisionMatches,
   verifyStepUpDecision,
 } from '../stepup.js';
+import { DEFAULT_STATUS_TTL_SECONDS, buildStatusList, signStatusList } from '../status.js';
 import { PROTOCOL_VERSION, type RequestContext } from '../types.js';
 import { canonicalizeUri, hostOfUri } from '../uri.js';
-import { type KeyResolver, verifyChain } from '../verify.js';
+import { NO_REQUEST, type KeyResolver, verifyChain } from '../verify.js';
 import {
   type BreakerConfig,
   type BreakerVerdict,
@@ -253,6 +254,47 @@ const sha256 = (s: string) => `sha256:${createHash('sha256').update(s, 'ascii').
  */
 const sha256Utf8 = (s: string) =>
   `sha256:${createHash('sha256').update(s, 'utf8').digest('hex')}`;
+
+/**
+ * A link's node, created on first presentation (§10.1).
+ *
+ * Shared by `reserve` and `register` so the two cannot drift: a mandate that was
+ * registered first and spent later must produce exactly the node a mandate that
+ * went straight to a spend would, or the second presentation trips the
+ * token-hash binding check against a node the ledger itself wrote differently.
+ *
+ * The revocation seed is the part worth reading twice. `revoked` used to be a
+ * literal `false` here, which meant a mandate the principal had already revoked
+ * came into existence unrevoked — because a revocation before a mandate's first
+ * spend had nowhere to live, and was refused. See `LedgerTx.putRevocation`.
+ */
+async function materialize(
+  tx: LedgerTx,
+  link: import('../types.js').MandateClaims,
+  parent: string | null,
+  root: string,
+  tokenHash: string,
+): Promise<MandateNode> {
+  const budget = link.cav.max_total;
+  return {
+    jti: link.jti,
+    parent,
+    root,
+    // Who granted this link. On the root that is the principal, and it is what
+    // §10.6 checks a control decision against — `isTrustedRootIssuer` only says
+    // a DID is *a* principal this deployment trusts.
+    issuer: link.iss,
+    tokenHash,
+    budgetScaled: budget === undefined ? null : toScaled(budget),
+    currency: budget?.cur ?? link.cav.currency ?? null,
+    spentScaled: 0n,
+    rate: link.cav.rate ?? null,
+    rateEvents: [],
+    revoked: await tx.isRevoked(root, link.jti),
+    statusIdx: link.st ?? null,
+    exp: link.exp,
+  };
+}
 
 export const DIRECTIVE_TYP = 'application/agent-directive+jwt';
 
@@ -496,24 +538,7 @@ export class Ledger {
           nodes.push(existing);
           continue;
         }
-        const budget = l.cav.max_total;
-        nodes.push({
-          jti: l.jti,
-          parent: i === 0 ? null : links[i - 1]!.jti,
-          root,
-          // Who granted this link. On the root that is the principal, and it is
-          // what §10.6 checks a control decision against — `isTrustedRootIssuer`
-          // only says a DID is *a* principal this deployment trusts.
-          issuer: l.iss,
-          tokenHash,
-          budgetScaled: budget === undefined ? null : toScaled(budget),
-          currency: budget?.cur ?? l.cav.currency ?? null,
-          spentScaled: 0n,
-          rate: l.cav.rate ?? null,
-          rateEvents: [],
-          revoked: false,
-          exp: l.exp,
-        });
+        nodes.push(await materialize(tx, l, i === 0 ? null : links[i - 1]!.jti, root, tokenHash));
       }
 
       // --- revocation: any revoked ancestor kills the whole subtree (§10.3) ---
@@ -1398,14 +1423,131 @@ export class Ledger {
     return ids;
   }
 
-  /** Spec §10.3 — revoking a jti kills its entire subtree on the next spend. */
+  /**
+   * Spec §10.3 — revoking a jti kills its entire subtree on the next spend.
+   *
+   * Takes no credential and is therefore only for a caller already inside the
+   * deployment; `applyControl` is the authenticated door to the same lever. It
+   * needs an existing node because it derives the root from one — a principal
+   * revoking a mandate the ledger has never seen goes through `applyControl`,
+   * which is told the root by the decision it verified.
+   */
   async revoke(jti: string): Promise<boolean> {
     return this.cfg.store.transact(async (tx) => {
       const n = await tx.getNode(jti);
       if (n === undefined) return false;
+      await tx.putRevocation(n.root, jti, this.cfg.clock());
       await tx.putNode({ ...n, revoked: true });
       return true;
     });
+  }
+
+  /**
+   * §10.1 materialization without a spend.
+   *
+   * Two things need this. A mandate cannot be revoked before it has been
+   * presented — there was no node to mark, so the revocation was refused and the
+   * first spend went through — and an *offline* mandate (§13) may never be
+   * presented to the ledger at all, so its status-list index would never be
+   * known and revoking it could not reach the merchant holding it.
+   *
+   * Registering is exactly the write `reserve` would have done, minus the debit:
+   * same node shape, same `jti`-to-content binding, same revocation seed. It is
+   * idempotent, and re-registering a `jti` whose content changed is refused for
+   * the same reason a spend would be — the alternative is a reset budget.
+   *
+   * No authority is granted by registering, and none is needed to do it: the
+   * chain is verified, and anyone holding a valid chain could have spent against
+   * it anyway.
+   */
+  async register(tokens: string[]): Promise<{ ok: true; path: string[] } | { ok: false; code: ErrorCode; detail: string }> {
+    const verified = await verifyChain(tokens, {
+      now: this.cfg.clock(),
+      // Registration authorizes nothing, so there is no request for §8 to cover.
+      // Everything else — signatures, attenuation, depth, the window — is
+      // checked exactly as a spend would check it.
+      request: NO_REQUEST,
+      isTrustedRootIssuer: this.cfg.isTrustedRootIssuer,
+      ...(this.cfg.resolveKey !== undefined ? { resolveKey: this.cfg.resolveKey } : {}),
+    });
+    if (!verified.ok) return { ok: false, code: verified.code, detail: verified.detail };
+
+    const links = verified.links;
+    const root = links[0]!.jti;
+
+    return this.cfg.store.transact(async (tx) => {
+      const locked = await tx.lockPath(verified.path);
+      for (let i = 0; i < links.length; i++) {
+        const tokenHash = sha256(tokens[i]!);
+        const existing = locked[i];
+        if (existing !== undefined) {
+          if (existing.tokenHash !== tokenHash) {
+            return {
+              ok: false as const,
+              code: 'chain_invalid' as ErrorCode,
+              detail: `jti ${links[i]!.jti} already recorded with different content`,
+            };
+          }
+          continue;
+        }
+        await tx.putNode(
+          await materialize(tx, links[i]!, i === 0 ? null : links[i - 1]!.jti, root, tokenHash),
+        );
+      }
+      return { ok: true as const, path: verified.path };
+    });
+  }
+
+  /**
+   * §10.3 — the root's status list, signed and ready to serve.
+   *
+   * Built from the nodes rather than from the revocation records, because a bit
+   * needs an index and only a mandate carries one. A revocation for a `jti` the
+   * ledger has never materialized is durably recorded and enforced online, and
+   * is invisible here — there is no index to set. That is the argument for
+   * registering an offline mandate at issuance rather than at first spend.
+   *
+   * **Set-only, never clear.** The list is the union of the revoked nodes'
+   * indices. Walking nodes and writing `bit[idx] = node.revoked` would look
+   * equivalent and is not: two mandates sharing an index would have the later
+   * unrevoked one clear the earlier revoked one's bit, and a revoked mandate
+   * would read as live. Building by union makes an index collision cost an
+   * unnecessary refusal instead of a missed one, which is the direction a
+   * revocation mechanism has to fail in.
+   */
+  async publishStatusList(
+    root: string,
+    opts: { seq?: number; ttlSeconds?: number; bits?: number } = {},
+  ): Promise<string> {
+    const nodes = await this.cfg.store.read(async (tx) => tx.findNodes(root));
+    const now = this.cfg.clock();
+    const revoked = nodes.filter((n) => n.revoked && n.statusIdx !== null).map((n) => n.statusIdx!);
+    const claims = buildStatusList({
+      ledger: this.cfg.url,
+      root,
+      revoked,
+      /**
+       * How many are revoked — a function of the list's *content*, not of when
+       * it was built.
+       *
+       * A wall clock is the obvious choice and it is wrong twice. At one-second
+       * resolution two lists published in the same second share a `seq`, so a
+       * revocation between them does not propagate; and a replica lagging on
+       * replication publishes a *newer* timestamp over a *smaller* revocation
+       * set, which is exactly the rollback the counter exists to prevent.
+       *
+       * Counting revocations fixes both, because revocation here is one-way —
+       * nothing in §10.6 un-revokes, and `putRevocation` never deletes — so the
+       * count only rises, and two lists under one root that agree on it agree on
+       * every bit. The lagging replica publishes a lower number and is correctly
+       * refused.
+       */
+      seq: opts.seq ?? revoked.length,
+      iat: now,
+      ttlSeconds: opts.ttlSeconds ?? DEFAULT_STATUS_TTL_SECONDS,
+      ...(opts.bits !== undefined ? { bits: opts.bits } : {}),
+    });
+    return signStatusList(claims, this.cfg.key);
   }
 
   async setGlobalKill(root: string, on: boolean): Promise<void> {
@@ -1461,17 +1603,22 @@ export class Ledger {
 
       if (claims.action === 'revoke') {
         const target = await tx.getNode(claims.target!);
-        if (target === undefined) {
-          return { ok: false, code: 'chain_invalid', detail: `unknown mandate ${claims.target}` };
-        }
-        if (target.root !== claims.root) {
+        if (target !== undefined && target.root !== claims.root) {
           return {
             ok: false,
             code: 'attenuation_violation',
             detail: `${claims.target} is not under ${claims.root}`,
           };
         }
-        await tx.putNode({ ...target, revoked: true });
+        // Recorded whether or not a node exists. It used to be refused as
+        // "unknown mandate" when one did not, which meant a principal could not
+        // revoke a mandate before its first spend — and the first spend then
+        // materialized a node with `revoked: false` and went through. The
+        // record is keyed by root, so a `jti` that later turns up under someone
+        // else's root is unaffected by this, which is the check that cannot be
+        // made against a node that does not exist yet.
+        await tx.putRevocation(claims.root, claims.target!, now);
+        if (target !== undefined) await tx.putNode({ ...target, revoked: true });
         return { ok: true, action: 'revoke', root: claims.root, target: claims.target! };
       }
 

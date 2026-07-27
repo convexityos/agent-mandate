@@ -41,6 +41,14 @@ export interface MandateNode {
   /** Timestamps of spends counted against this node's own rate caveat. */
   rateEvents: number[];
   revoked: boolean;
+  /**
+   * The mandate's `st` claim — its bit in this root's status list (§10.3).
+   *
+   * null means the mandate was minted without one and is not revocable offline.
+   * The ledger cannot invent an index: the number is inside the signed mandate,
+   * so a mandate with no `st` cannot be added to a list after the fact.
+   */
+  statusIdx: number | null;
   exp: number;
 }
 
@@ -238,6 +246,31 @@ export interface LedgerTx {
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
 
   /**
+   * §10.3 — record that a `jti` under `root` is revoked, whether or not the
+   * ledger has ever materialized a node for it.
+   *
+   * This exists because `MandateNode.revoked` alone could not express the case
+   * that matters most. A node is created on a mandate's *first spend*, so before
+   * that there was nothing to set the flag on and a principal simply could not
+   * revoke a mandate that had not been used yet — the revocation was refused as
+   * "unknown mandate" and the first spend then went through. Offline mode makes
+   * it worse: the ledger may not see a spend at all until the merchant's next
+   * report, which can be after the loss.
+   *
+   * So the record is the durable truth and the node's flag is the materialized
+   * copy of it. Both are written together, and a node created later seeds its
+   * flag from here.
+   *
+   * Scoped by root rather than global: without a node there is no recorded
+   * parent, so "is this `jti` in your subtree" cannot be checked. Keying the
+   * record by root means a principal's pre-emptive revocation only ever applies
+   * to mandates that turn out to be under their own root, and a `jti` that
+   * materializes elsewhere is untouched by it.
+   */
+  putRevocation(root: string, jti: string, at: number): Promise<void>;
+  isRevoked(root: string, jti: string): Promise<boolean>;
+
+  /**
    * §9 idempotency. Inside `transact` this MUST take whatever lock makes a
    * subsequent `putIdempotent` for the same key safe — including when the row
    * does not exist yet, which is the case that matters: two concurrent first
@@ -339,6 +372,8 @@ export class MemoryLedgerStore implements LedgerStore {
   private readonly kills = new Set<string>();
   private readonly nonces = new Map<string, number>();
   private readonly idempotency = new Map<string, IdempotencyRecord>();
+  /** Keyed `root jti`; see `putRevocation` on why the root is part of the key. */
+  private readonly revocations = new Map<string, number>();
 
   /**
    * Serialization via a promise chain. Node is single-threaded, but `reserve`
@@ -396,6 +431,13 @@ export class MemoryLedgerStore implements LedgerStore {
       this.nonces.set(nonce, expiresAt);
       return true;
     },
+
+    putRevocation: async (root, jti, at) => {
+      const key = `${root} ${jti}`;
+      this.undo(this.revocations, key);
+      this.revocations.set(key, at);
+    },
+    isRevoked: async (root, jti) => this.revocations.has(`${root} ${jti}`),
 
     getIdempotent: async (key) => {
       const rec = this.idempotency.get(key);
