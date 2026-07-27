@@ -13,7 +13,7 @@ import {
 } from '../src/caveats.js';
 import { agentKeyFromSeed } from '../src/sign.js';
 import { canonicalizeUri, hostSetContains, uriSetContains } from '../src/uri.js';
-import { verifyChain } from '../src/verify.js';
+import { ANY_LEDGER, verifyChain } from '../src/verify.js';
 import type { RequestContext } from '../src/types.js';
 import {
   type CaveatVector,
@@ -61,6 +61,12 @@ describe('§7 chain vectors', () => {
       const result = await verifyChain(v.tokens, {
         now: v.now,
         request: v.request as unknown as RequestContext,
+        // The sentinel's reason for existing. A vector is a chain and a verdict;
+        // there is no serving party in the format, so there is no identity to
+        // compare and pretending otherwise would make every vector fail. §7 step
+        // 3's second half binds a deployment, not a chain, which is also why it
+        // has no vector of its own.
+        ledger: ANY_LEDGER,
         isTrustedRootIssuer: (iss) => trusted.has(iss),
         ...(v.presenterJkt !== undefined ? { presenterJkt: v.presenterJkt } : {}),
         ...(v.maxDepth !== undefined ? { maxDepth: v.maxDepth } : {}),

@@ -394,8 +394,9 @@ verify_chain(chain, request, now) -> effective_caveats | error
   1.  1 ≤ len(chain) ≤ MAX_DEPTH                      else chain_invalid
   2.  all links have v == "am/1" and typ == "mandate"  else chain_invalid
   3.  all links agree on `ledger`                       else chain_invalid
-      chain[0].ledger == self, if the verifier IS a       else chain_invalid
-        Ledger being asked to spend or register
+      chain[0].ledger == self, for any verifier that      else chain_invalid
+        will ACT on the chain rather than merely
+        verify it (a Ledger; an offline Merchant)
 
   4.  root = chain[0]
       root.par == null                                  else chain_invalid
@@ -447,9 +448,9 @@ verify_chain(chain, request, now) -> effective_caveats | error
 **Step 3 has two halves, and only the first is a property of the chain.** "All
 links agree on `ledger`" makes a chain internally consistent. On its own it
 bounds nothing: agreement among the links says the delegation is coherent, not
-that whoever is reading it is the party the Principal addressed it to. A Ledger
-asked to `reserve` or `register` against a chain **MUST** therefore also check
-that `chain[0].ledger` names *itself*, and refuse with `chain_invalid` otherwise.
+that whoever is reading it is the party the Principal addressed it to. Any
+verifier that will **act** on a chain **MUST** therefore also check that
+`chain[0].ledger` names *itself*, and refuse with `chain_invalid` otherwise.
 
 Skipping it costs the budget. Consumption state (§10.1) is per-Ledger, so a
 mandate a second Ledger will accept has a second `max_total` — the same grant
@@ -457,13 +458,29 @@ spends in full at every Ledger that takes it, with no rule above broken along th
 way. This is the mirror of the check a Merchant already makes on a spend token's
 `iss` (§14.2): every party refuses a credential naming a counterparty it is not.
 
-Two notes on applying it. Trailing slashes are not significant, because
+**"Act on" is the operative phrase, and it reaches past the Ledger.** Two parties
+are bound:
+
+- a **Ledger** asked to `reserve` or `register`, which is where the budget lives;
+- an **offline Merchant** (§13), which is the subtler one and the more dangerous.
+  Offline settlement happens with no Ledger on the path, so the Merchant is the
+  only party acting on the chain. A Merchant that settles with Ledger A and
+  accepts a chain naming Ledger B reports that consumption to A, which has no
+  record of the root — so the spend debits nothing, anywhere, and the §13 caps
+  bound an exposure no ledger is accounting for.
+
+A verifier that merely *verifies* — a conformance-vector runner, a CLI inspecting
+a credential it has no relationship with — holds no identity to compare and is
+bound only by the first half. Implementations **SHOULD** make that an explicit
+declaration rather than an omission: the failure mode of this rule is that
+somebody forgets it, and an absent parameter and a deliberate opt-out must not
+look the same in the source.
+
+One note on applying it: trailing slashes are not significant, because
 `{ledger}/v1/status/{root}` (§10.3.1) already treats `{url}` and `{url}/` as one
-list and the two notions of Ledger identity must not diverge; nothing else is
+list and the two notions of Ledger identity must not diverge. Nothing else is
 normalized, since `ledger` is an identity to compare rather than a URI to
-resolve. And the check binds *Ledgers*, not verifiers in general — a stateless
-verifier, an offline Merchant, or a CLI holds no Ledger identity to compare
-against and is bound only by the first half.
+resolve.
 
 This constrains implementations, not the wire format: the bytes of a mandate and
 its verdict at the Ledger it names are unchanged, so §17.3 is satisfied. What

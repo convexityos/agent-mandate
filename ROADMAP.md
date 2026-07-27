@@ -621,19 +621,41 @@ presents it to a second, which is the finding stated as money rather than as an
 error code.
 
 It is catalogue entry `multi-ledger-budget-multiplication` (§3.3), and writing
-that entry is what surfaced the half of it that is **not** fixed. The catalogue
-asks every entry to name a gap or cite a test, and the honest answer here is
-both. `Merchant.handle` makes the mirror-image check online; the §13 offline path
-does not make it at all. `checkOfflineProfile` takes the effective caveats and
-the window, and `verifyChain` holds no ledger identity — so a merchant settling
-with ledger A can accept a chain naming ledger B, report the consumption to A,
-and have A record nothing against a root it has never heard of. The mandate is
-spendable offline without ever debiting the ledger that issued it.
+that entry is what found the second half of the bug — which is the argument for
+the catalogue's format rather than an aside. The entry has to cite a test or
+state a gap, and the first draft had to state one: the fix was in `Ledger`, and
+`Ledger` is not the only party that acts on a chain.
 
-That is the same attack pointed one layer out, and closing it means deciding
-whether `verifyChain` should take the relying party's own ledger URL. Which is a
-signature change to the §7 function rather than a missing line, and is the reason
-it is written down here rather than guessed at.
+**The offline merchant was the worse case.** §13 settles with no ledger on the
+path, so the merchant is the *only* party acting, and `verifyChain` held no
+ledger identity to give it — `checkOfflineProfile` takes the effective caveats
+and the window and never sees `ledger` at all. A merchant settling with ledger A
+could accept a chain naming ledger B and report the consumption to A, which has
+no record of that root. The spend then debits **nothing, anywhere**: not B, which
+never hears about it, and not A, which cannot attribute it. §13's caps were
+bounding an exposure no ledger was accounting for.
+
+So the check moved into `verifyChain`, where §7 step 3 lives, and
+`VerifyOptions.ledger` is **required** with `ANY_LEDGER` as the opt-out. That is
+the `NO_REQUEST` pattern and it is the right one here for the same reason: this
+bug *is* a forgotten check, so an absent parameter and a deliberate decline must
+not look the same in the source. I had argued against this shape earlier in the
+same branch, on the grounds that only one caller had a ledger identity. That was
+true and it was the wrong conclusion — the second caller was the one with no
+ledger behind it to catch the mistake.
+
+Three parties are bound now: `reserve`, `register`, and the offline merchant. The
+gateway passes the ledger's URL too, so `tools/list` cannot advertise a tool that
+`reserve` would refuse on the chain's address. `Ledger.url` is public for that,
+and `GatewayLedger` carries it so the two cannot disagree about which ledger they
+are fronting.
+
+One thing found in passing and not fixed: `NO_REQUEST` is a **literal NUL byte**
+in the source (`'\0no-request'`, written raw), which makes git treat
+`src/verify.ts` as binary — so the §7 implementation, the single most
+review-sensitive file here, has had no readable diffs. `ANY_LEDGER` uses an
+escape instead. Converting the older sentinel is a one-character change with no
+behavioural effect and belongs in its own commit.
 
 ## Recommended sequence
 

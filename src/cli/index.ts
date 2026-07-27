@@ -14,7 +14,7 @@ import { MemoryLedgerStore } from '../ledger/store.js';
 import { type Money, isMoney, toScaled } from '../money.js';
 import { type AgentKey, agentKeyFromSeed, generateAgentKey, signMandate } from '../sign.js';
 import { PROTOCOL_VERSION, type MandateClaims } from '../types.js';
-import { verifyChain } from '../verify.js';
+import { ANY_LEDGER, verifyChain } from '../verify.js';
 import { bold, caveats, cyan, dim, green, indent, money, red, shortDid, yellow } from './format.js';
 
 /**
@@ -34,6 +34,7 @@ const USAGE = `am — Agent Mandate Protocol (${PROTOCOL_VERSION})
   am attenuate --key FILE --sub DID --cav JSON [--chain FILE] [--exp SECS] [--jti ID]
   am verify   [--chain FILE] --trust DID --resource URL --amount "1.00 USD"
               [--purpose P] [--task T] [--effect read|write|irreversible] [--now TS]
+              [--ledger URL]   the ledger you serve; the chain must name it (§7)
   am inspect  [--chain FILE]
   am replay   [--chain FILE] --trust DID --spends FILE
 
@@ -245,9 +246,17 @@ async function verify(flags: Args['flags'], out: (s: string) => void): Promise<n
       : {}),
   };
 
+  // `--ledger` is how you ask the §7 step 3 question from the CLI. Without it
+  // this is a bystander inspecting a credential it has no relationship with, and
+  // saying so is more honest than comparing against a made-up URL — but a
+  // deployment checking its *own* mandates should pass it, because a chain that
+  // verifies here and is refused by the ledger is the confusing outcome.
+  const expectLedger = optional(flags, 'ledger');
+
   const result = await verifyChain(tokens, {
     now: now(flags),
     request: request as never,
+    ledger: expectLedger ?? ANY_LEDGER,
     isTrustedRootIssuer: (iss) => iss === trust,
   });
 

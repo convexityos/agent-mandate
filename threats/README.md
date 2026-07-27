@@ -16,13 +16,12 @@ valuable findings in this project were mitigations that **existed and did not
 work**, and a catalogue that cannot tell the difference is worse than no
 catalogue at all.
 
-57 entries. 56 cite at least one test; 1 cannot, and 5 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
+57 entries. 56 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
 
 Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run threats`.
 
 ## Where the defence is partial or absent
 
-- **Spending one mandate at every ledger** <sub>`multi-ledger-budget-multiplication`</sub> — Closed at the Ledger, open at an **offline** merchant. `Merchant.handle` makes the mirror-image check online — it refuses a spend token whose `iss` is not the Ledger it settles with — but the §13 offline path never looks at `ledger` at all: `checkOfflineProfile` takes the effective caveats and the window, and `verifyChain` holds no Ledger identity to compare against. So a merchant settling with Ledger A can accept a chain naming Ledger B, report the consumption to A, and have A record nothing against a root it has never heard of. The mandate is then spendable offline without ever debiting the Ledger that issued it. Fixing it means giving the offline verifier the merchant's own `ledgerUrl`, which is a decision about `verifyChain`'s signature rather than a missing line.
 - **Agent bypasses the Ledger entirely** <sub>`agent-bypasses-the-ledger`</sub> — Detective only, and the reconciliation it depends on is not implemented here — `DelegatedTransferRail` declares the weaker guarantees, but nothing in this repo watches a payer account. Stated rather than engineered around.
 - **Cross-merchant parallel spend** <sub>`cross-merchant-parallel-spend`</sub> — Bounded, never prevented — that is what §13 buys and it is the whole trade. `offlineRiskBudget` computes the figure §13 says MUST be surfaced to the principal, but nothing in this repo *tracks* live offline grants to feed it, and the 60-second reporting requirement is not enforced anywhere either. A deployment has to wire both.
 - **Reaching the upstream server without the gateway** <sub>`routing-around-the-gateway`</sub> — Structural, not fixable inside the gateway. A deployment that needs this guarantee needs egress control or a sandbox, which this project does not provide and does not claim to.
@@ -384,19 +383,17 @@ Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run t
 
 ### Spending one mandate at every ledger
 
-<sub>`multi-ledger-budget-multiplication` · §7, §10.1 · preventive control</sub>
+<sub>`multi-ledger-budget-multiplication` · §7, §10.1, §13 · preventive control</sub>
 
 **The attack.** Present the same chain to several Ledgers. Each verifies it, each accepts it, each debits its own state — so a `max_total` of 20.00 buys 20.00 at every Ledger that will take it.
 
 **Why it works.** §7 step 3 says "all links agree on `ledger`", which *reads* like it binds a chain to one Ledger and does not. Agreement among the links makes a chain internally coherent; it says nothing about who is reading it. Consumption state is per-Ledger, so a second Ledger that accepts the chain offers a second full budget — and nothing in §7 is violated along the way, because every signature is valid, every caveat narrows, and every link does agree. The natural implementation uses its own URL only as the `iss` of minted spend tokens and never compares it to anything, which is exactly what this one did.
 
-**The check.** The second half of §7 step 3: a Ledger refuses a chain whose `chain[0].ledger` is not its own URL, at `reserve` and at `register` both. `register` needs it independently — the status list URI is derived as `{ledger}/v1/status/{root}`, so registering a foreign chain mints an index no merchant will ever fetch and records the mandate as revocable when it is not.
+**The check.** The second half of §7 step 3, enforced in `verifyChain` itself so it binds every party that acts on a chain rather than only the one that noticed first. `VerifyOptions.ledger` is **required**, and declining the check is the `ANY_LEDGER` sentinel rather than an omitted field — the failure mode of this rule is that somebody forgets it, so an absent parameter and a deliberate opt-out must not look alike. Three parties are bound: a Ledger at `reserve` and at `register`, and an **offline** merchant, which is the one that settles with no Ledger on the path and is therefore the only party acting on the chain at all. `register` needs it independently — the status list URI is derived as `{ledger}/v1/status/{root}`, so registering a foreign chain mints an index no merchant will ever fetch and records the mandate as revocable when it is not.
 
-> **Gap.** Closed at the Ledger, open at an **offline** merchant. `Merchant.handle` makes the mirror-image check online — it refuses a spend token whose `iss` is not the Ledger it settles with — but the §13 offline path never looks at `ledger` at all: `checkOfflineProfile` takes the effective caveats and the window, and `verifyChain` holds no Ledger identity to compare against. So a merchant settling with Ledger A can accept a chain naming Ledger B, report the consumption to A, and have A record nothing against a root it has never heard of. The mandate is then spendable offline without ever debiting the Ledger that issued it. Fixing it means giving the offline verifier the merchant's own `ledgerUrl`, which is a decision about `verifyChain`'s signature rather than a missing line.
+**Where.** [`src/verify.ts`](../src/verify.ts), [`src/ledger/ledger.ts`](../src/ledger/ledger.ts)
 
-**Where.** [`src/ledger/ledger.ts`](../src/ledger/ledger.ts)
-
-**Proven by.** [`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses a chain addressed to another ledger*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses even when every link agrees — agreement is not address*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *does not let one mandate be spent in full at every ledger that takes it*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses to register one either — a list nobody would fetch is worse than none*
+**Proven by.** [`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses a chain addressed to another ledger*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses even when every link agrees — agreement is not address*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *does not let one mandate be spent in full at every ledger that takes it*<br>[`test/ledger.test.ts`](../test/ledger.test.ts) — *refuses to register one either — a list nobody would fetch is worse than none*<br>[`test/offline.test.ts`](../test/offline.test.ts) — *refuses a conforming chain addressed to another ledger*<br>[`test/offline.test.ts`](../test/offline.test.ts) — *is what stops an offline spend that would debit no ledger at all*
 
 ---
 

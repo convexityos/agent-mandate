@@ -465,9 +465,9 @@ export const THREATS: ThreatEntry[] = [
       'Present the same chain to several Ledgers. Each verifies it, each accepts it, each debits its own state — so a `max_total` of 20.00 buys 20.00 at every Ledger that will take it.',
     why: '§7 step 3 says "all links agree on `ledger`", which *reads* like it binds a chain to one Ledger and does not. Agreement among the links makes a chain internally coherent; it says nothing about who is reading it. Consumption state is per-Ledger, so a second Ledger that accepts the chain offers a second full budget — and nothing in §7 is violated along the way, because every signature is valid, every caveat narrows, and every link does agree. The natural implementation uses its own URL only as the `iss` of minted spend tokens and never compares it to anything, which is exactly what this one did.',
     check:
-      'The second half of §7 step 3: a Ledger refuses a chain whose `chain[0].ledger` is not its own URL, at `reserve` and at `register` both. `register` needs it independently — the status list URI is derived as `{ledger}/v1/status/{root}`, so registering a foreign chain mints an index no merchant will ever fetch and records the mandate as revocable when it is not.',
-    spec: ['§7', '§10.1'],
-    code: ['src/ledger/ledger.ts'],
+      'The second half of §7 step 3, enforced in `verifyChain` itself so it binds every party that acts on a chain rather than only the one that noticed first. `VerifyOptions.ledger` is **required**, and declining the check is the `ANY_LEDGER` sentinel rather than an omitted field — the failure mode of this rule is that somebody forgets it, so an absent parameter and a deliberate opt-out must not look alike. Three parties are bound: a Ledger at `reserve` and at `register`, and an **offline** merchant, which is the one that settles with no Ledger on the path and is therefore the only party acting on the chain at all. `register` needs it independently — the status list URI is derived as `{ledger}/v1/status/{root}`, so registering a foreign chain mints an index no merchant will ever fetch and records the mandate as revocable when it is not.',
+    spec: ['§7', '§10.1', '§13'],
+    code: ['src/verify.ts', 'src/ledger/ledger.ts'],
     test: [
       t('test/ledger.test.ts', 'refuses a chain addressed to another ledger'),
       t('test/ledger.test.ts', 'refuses even when every link agrees — agreement is not address'),
@@ -479,8 +479,12 @@ export const THREATS: ThreatEntry[] = [
         'test/ledger.test.ts',
         'refuses to register one either — a list nobody would fetch is worse than none',
       ),
+      t('test/offline.test.ts', 'refuses a conforming chain addressed to another ledger'),
+      t(
+        'test/offline.test.ts',
+        'is what stops an offline spend that would debit no ledger at all',
+      ),
     ],
-    gap: 'Closed at the Ledger, open at an **offline** merchant. `Merchant.handle` makes the mirror-image check online — it refuses a spend token whose `iss` is not the Ledger it settles with — but the §13 offline path never looks at `ledger` at all: `checkOfflineProfile` takes the effective caveats and the window, and `verifyChain` holds no Ledger identity to compare against. So a merchant settling with Ledger A can accept a chain naming Ledger B, report the consumption to A, and have A record nothing against a root it has never heard of. The mandate is then spendable offline without ever debiting the Ledger that issued it. Fixing it means giving the offline verifier the merchant\'s own `ledgerUrl`, which is a decision about `verifyChain`\'s signature rather than a missing line.',
     control: 'preventive',
   },
   {
