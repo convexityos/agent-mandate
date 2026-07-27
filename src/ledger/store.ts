@@ -372,7 +372,14 @@ export class MemoryLedgerStore implements LedgerStore {
   private readonly kills = new Set<string>();
   private readonly nonces = new Map<string, number>();
   private readonly idempotency = new Map<string, IdempotencyRecord>();
-  /** Keyed `root jti`; see `putRevocation` on why the root is part of the key. */
+  /**
+   * Keyed `root\0jti`; see `putRevocation` on why the root is part of the key.
+   *
+   * NUL is the separator because it cannot occur in either half, so no pair of
+   * distinct `(root, jti)` can collide on one key. Written as the escape `\0`
+   * rather than as a literal control character: a raw NUL makes git classify the
+   * whole file as binary, and this one loses its diffs in review.
+   */
   private readonly revocations = new Map<string, number>();
 
   /**
@@ -433,11 +440,11 @@ export class MemoryLedgerStore implements LedgerStore {
     },
 
     putRevocation: async (root, jti, at) => {
-      const key = `${root} ${jti}`;
+      const key = `${root}\0${jti}`;
       this.undo(this.revocations, key);
       this.revocations.set(key, at);
     },
-    isRevoked: async (root, jti) => this.revocations.has(`${root} ${jti}`),
+    isRevoked: async (root, jti) => this.revocations.has(`${root}\0${jti}`),
 
     getIdempotent: async (key) => {
       const rec = this.idempotency.get(key);

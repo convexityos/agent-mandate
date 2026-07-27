@@ -650,12 +650,22 @@ gateway passes the ledger's URL too, so `tools/list` cannot advertise a tool tha
 and `GatewayLedger` carries it so the two cannot disagree about which ledger they
 are fronting.
 
-One thing found in passing and not fixed: `NO_REQUEST` is a **literal NUL byte**
-in the source (`'\0no-request'`, written raw), which makes git treat
-`src/verify.ts` as binary — so the §7 implementation, the single most
-review-sensitive file here, has had no readable diffs. `ANY_LEDGER` uses an
-escape instead. Converting the older sentinel is a one-character change with no
-behavioural effect and belongs in its own commit.
+One thing found in passing, and fixed separately: **`src/verify.ts` was binary to
+git.** `NO_REQUEST` held a literal NUL byte rather than the escape `\0`, at byte
+1359 — inside git's 8000-byte binary-detection window — so the §7 implementation,
+the single most review-sensitive file in the repo, had produced no readable diff
+in any commit that ever touched it. Nobody could have reviewed a change to chain
+verification by reading the diff, because there wasn't one.
+
+`src/ledger/store.ts` had three more, in the revocation key `root\0jti`. Those
+escaped notice for the opposite reason: they sit past byte 8000, so git classified
+that file as text and the diffs were fine. Same latent defect, different luck.
+
+All four are escapes now, with identical runtime values — verified by asserting
+the sentinel against a reconstructed literal and by round-tripping a revocation
+key, rather than by trusting that it compiled. NUL remains the right choice for
+both: it is uninhabitable by any real value, which is exactly what a sentinel and
+a composite-key separator each need.
 
 ## Recommended sequence
 
