@@ -1,0 +1,7 @@
+# LF in the repository and in the working tree, on every platform.
+#
+# Not cosmetic here: several tests assert on exact bytes — canonical JSON for
+# receipt signatures, the newline-delimited MCP stdio framing, RFC 9421 signature
+# bases — and a checkout that rewrote line endings would change what those hash
+# and sign over.
+* text=auto eol=lf

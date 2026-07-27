@@ -1,0 +1,28 @@
+{
+  "name": "agent-mandate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference caveat lattice and chain verifier for the Agent Mandate Protocol v1 (am/1)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.20.0",
+    "fast-check": "^3.23.2",
+    "pg": "^8.22.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0"
+  }
+}

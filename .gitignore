@@ -1,0 +1,14 @@
+node_modules/
+dist/
+
+# Never commit key material. Nothing here generates a persistent key today —
+# every key in the tests is minted per-run — and this is here so that stays true
+# by accident as well as on purpose.
+*.pem
+*.key
+demo-key.json
+.env
+.env.*
+
+*.log
+.DS_Store
