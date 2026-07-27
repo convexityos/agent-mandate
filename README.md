@@ -38,6 +38,7 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/http/sfv.ts`](src/http/sfv.ts) | RFC 8941 Structured Fields (the dictionary subset) |
 | [`src/http/merchant.ts`](src/http/merchant.ts) | §14 merchant side: 402 challenge, verify, admit |
 | [`src/http/client.ts`](src/http/client.ts) | §14 agent side: parse challenge, sign, retry once |
+| [`src/http/mandated-fetch.ts`](src/http/mandated-fetch.ts) | §2.2 — `mandatedFetch`, a drop-in `fetch` that pays for what it asks for |
 | [`src/rail/rail.ts`](src/rail/rail.ts) | §12.2 — the custodial settlement seam, and atomic-unit conversion |
 | [`src/rail/x402.ts`](src/rail/x402.ts) | Custodial x402 adapter (HTTP 402 + EIP-3009 on Base) |
 | [`src/rail/noncustodial.ts`](src/rail/noncustodial.ts) | §12.4 — directives, rail capabilities, the non-custodial seam |
@@ -92,6 +93,35 @@ if (!result.ok) return problemJson(result.code, result.detail);
 `verifyChain` returns a result rather than throwing. It runs on
 attacker-controlled input on the spend path, and a thrown exception is one stray
 `try/catch` away from being swallowed into an allow.
+
+### Paying for a request, in one import
+
+```ts
+import { mandatedFetch, localMint, refusalCode } from './src/index.js';
+
+const fetch = mandatedFetch({ tokens: chainOfJwsStrings, key: agentKey, mint: localMint(ledger) });
+
+const res = await fetch('https://api.weatherco.com/v3/forecast/94110');
+```
+
+402 → present → mint → sign → retry, once. Drop-in: same call shape, same
+`Response`, body and status intact, and a `POST` body is replayed on the paid
+attempt.
+
+**A refusal is a `Response`, not an exception.** When the mandate says no, you
+get RFC 9457 problem details rather than a throw:
+
+```ts
+if (!res.ok && refusalCode(res) === 'budget_exhausted') { /* your principal said no */ }
+```
+
+That distinction matters: an agent that wraps its calls in `try/catch` would
+otherwise convert a spending control into a retry loop. Network failures still
+throw, because that is what `fetch` does.
+
+Use `remoteMint({ url, key })` to mint against a `LedgerService` over HTTP
+instead — it signs the mint with RFC 9421, so pair it with
+`resolvePresenter: rfc9421Presenter()` on the service.
 
 ### Seeing why a chain does not attenuate
 

@@ -25,7 +25,7 @@ ordering below rather than for any particular item in it.
 | Verification | §7 chain verification against the accumulated meet, 52 published conformance vectors | — |
 | Ledger | reserve / settle / refund / revoke / reconcile, path-walk debit, breakers, step-up, durable store, reconciler, HTTP service | — |
 | Settlement | custodial + non-custodial x402, card/ACH-shaped rail, EIP-712/3009, `authorizationState` | escrow (deliberately — see triage) |
-| Transport | §14 binding, merchant verifier, agent client | a `fetch` anyone would actually import |
+| Transport | §14 binding, merchant verifier, agent client, `mandatedFetch` | — |
 | Agents | signer, directive execution, MCP mandate gateway | harness integration |
 | Humans | signed step-up and control decisions, approval queue, principal console | — |
 
@@ -231,14 +231,40 @@ The motivating example stopped being hypothetical while this was being written:
 the session that built it was itself carrying `place_equity_order`,
 `place_option_order` and `flatten_and_go_short`, with nothing in front of them.
 
-### 2.2 `mandatedFetch()`
+### 2.2 `mandatedFetch()` — **done**
 
-[`src/http/client.ts`](src/http/client.ts) has the loop. Nobody wants to assemble
-it. One import, drop-in for `fetch`, handling 402 → present → mint → sign →
-retry, returning a refusal rather than throwing on policy veto.
+[`src/http/mandated-fetch.ts`](src/http/mandated-fetch.ts).
 
-Adoption is an ergonomics problem now, not a protocol problem. Merchant-side
-conformance is five checks by design (§1.1); agent-side should be one line.
+```ts
+const fetch = mandatedFetch({ tokens, key, mint: localMint(ledger) });
+const res = await fetch('https://api.weatherco.com/v3/forecast/94110');
+```
+
+`payAndRetry` had the loop already; this is the ergonomics. Two mint sources —
+`localMint` for an in-process ledger, `remoteMint` for the §1.2 service — plus
+`rfc9421Presenter()`, without which the remote pairing does not actually work,
+because §7 step 9 needs a thumbprint the transport verified.
+
+**A refusal is a `Response`, not an exception.** Budget exhausted, resource
+outside the grant, a human needed: all return RFC 9457 problem details with an
+`x-am-refusal` header carrying the §15 code, so a caller can tell "your principal
+said no" from "the merchant said no". That is the point of being drop-in — code
+that already handles `fetch` handles this, and an agent that wraps its calls in
+`try/catch` does not silently convert a spending control into a retry loop.
+Network failures still throw, because that is what `fetch` does.
+
+Two things building it settled:
+
+- **The body is buffered up front.** The 402 is answered by re-sending, and a
+  stream reads once. A drop-in that lost the body on the paid attempt would work
+  for every GET and silently corrupt every POST.
+- **Idempotency is scoped to the quote, and cannot be scoped wider.** I first
+  let a caller supply their own key so a whole-call retry would be one purchase.
+  It cannot be: a retry gets a fresh 402 with a fresh `quoteId`, which is a
+  different purchase against a different quote, and replaying the earlier mint
+  would return a token bound to a quote the merchant has moved on from. The
+  quote-derived key makes the *mint* idempotent — the failure §9 exists for —
+  and the abandoned reservation is cleaned up by expiry rather than by replay.
 
 ### 2.3 Harness integration
 
@@ -426,11 +452,12 @@ a spend that needed a human was the first thing to walk straight through.
 All three exist, and §1.3 and §5.2 with them. §5 is closed: the principal is no
 longer the only party in the protocol without an interface.
 
-**Section 1 is complete.** The honest shortlist from here is §2.2/§2.3
-(`mandatedFetch` and the harness hook, both small and both pure adoption), §3.2
-(revocation distribution, roughly a day's work and the thing offline mode
-currently bounds only by `exp`), and §3.3 (the threat catalogue, which is the
-last piece of §3 and now has a conformance suite to point its entries at).
+**Section 1 is complete.** The honest shortlist from here is §2.3 (the harness
+hook — a `PreToolUse` hook for Claude Code, now that `mandatedFetch` and the MCP
+gateway have done the hard parts), §3.2 (revocation distribution, roughly a day's
+work and the thing offline mode currently bounds only by `exp`), and §3.3 (the
+threat catalogue, which is the last piece of §3 and now has a conformance suite
+to point its entries at).
 
 One thing this pass exposed that is not on the list anywhere: **there is no
 migration story.** `CREATE TABLE IF NOT EXISTS` does nothing to a table that

@@ -8,3 +8,4 @@ export * from './approval.js';
 export * from './console.js';
 export * from './service.js';
 export * from './serve.js';
+export * from './mandated-fetch.js';
