@@ -1,0 +1,71 @@
+name: CI
+
+# The typecheck and the whole suite, with the Postgres ledger tests switched on.
+#
+# Locally those 17 tests are opt-in (PG_URL), so the default run never touches
+# the one configuration where the ledger's concurrency properties mean what
+# they say: real row locks, a connection per caller. Here a service container
+# provides the database, and the last step fails if they were skipped anyway,
+# since a skipped suite passes exactly like a green one. The live-network tests
+# (LIVE_RPC) stay off: CI must not depend on a public RPC endpoint.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: am
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_URL: postgres://postgres:am@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      # engines says >=20; 20 left support on 2026-04-30, so the oldest line
+      # still maintained is the one tested.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -p tsconfig.json --noEmit
+
+      # vectors.test.ts fails if the committed conformance vectors no longer
+      # match what the code generates, so this also guards vectors/.
+      - name: Test
+        run: npx vitest run --reporter=default --reporter=json --outputFile=vitest-results.json
+
+      - name: The Postgres ledger tests ran
+        run: |
+          node -e '
+            const r = require("./vitest-results.json");
+            const pg = r.testResults.filter((f) => f.name.endsWith("ledger.postgres.test.ts"));
+            const passed = pg.flatMap((f) => f.assertionResults).filter((a) => a.status === "passed").length;
+            const other = pg.flatMap((f) => f.assertionResults).filter((a) => a.status !== "passed").length;
+            console.log(`postgres ledger tests: ${passed} passed, ${other} not passed`);
+            if (passed === 0 || other > 0) process.exit(1);
+          '
