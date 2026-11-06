@@ -28,7 +28,7 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/cli/index.ts`](src/cli/index.ts) | §1.4 — `am mint / attenuate / verify / inspect / replay` |
 | [`src/ledger/ledger.ts`](src/ledger/ledger.ts) | §10 — reserve / settle / refund / revoke, path-walk debit |
 | [`src/ledger/store.ts`](src/ledger/store.ts) | Persistence seam; in-memory reference impl with a real critical section |
-| [`src/ledger/sql/sqlite.ts`](src/ledger/sql/sqlite.ts) | Durable store on `node:sqlite` — one writer, serialization for free |
+| [`src/ledger/sql/sqlite.ts`](src/ledger/sql/sqlite.ts) | Durable store on `node:sqlite` — one writer, serialization for free; `readOnly` for a reader beside the owner |
 | [`src/ledger/sql/postgres.ts`](src/ledger/sql/postgres.ts) | Durable store on Postgres — root-to-leaf lock order, retry on deadlock |
 | [`src/ledger/breakers.ts`](src/ledger/breakers.ts) | §10.4 — velocity, burn rate, task ceiling, novel merchant, kill |
 | [`src/ledger/reconciler.ts`](src/ledger/reconciler.ts) | §12.2.3 — resolve `settling`, escalate the undecidable, sweep the expired |
