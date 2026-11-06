@@ -51,7 +51,12 @@ order deadlocks under normal traffic, not adversarial traffic).
 Then it shipped a `Map`. Both stores now exist:
 
 - [`SqliteStore`](src/ledger/sql/sqlite.ts) — single-writer, trivial
-  serialization, right for local dev and the CLI.
+  serialization, right for local dev and the CLI. `readOnly: true` opens an
+  existing file beside the process that owns it, for a status command or a
+  console: the engine refuses writes, `transact` is refused, and a file that
+  predates a table or column is refused by name. A writable open was not that
+  even when nothing was spent through it, because the constructor sets the
+  journal mode and adds what the file lacks.
 - [`PostgresStore`](src/ledger/sql/postgres.ts) — the real one. Root-to-leaf lock
   ordering, a retry policy for deadlock and serialization failure.
 

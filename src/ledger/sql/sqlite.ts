@@ -158,20 +158,114 @@ function bind(v: unknown): SQLInputValue {
   return v as SQLInputValue;
 }
 
+/**
+ * Every table and column this store reads, taken from `SCHEMA` itself by
+ * applying it to an empty in-memory database. Not a second list: a column added
+ * to `SCHEMA` is required of a read-only open the moment it is added, with
+ * nothing else to remember to edit.
+ */
+function declaredColumns(): Map<string, Set<string>> {
+  const mem = new DatabaseSync(':memory:');
+  try {
+    mem.exec(SCHEMA);
+    const tables = mem.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Row[];
+    return columnsOf(
+      mem,
+      tables.map((r) => r['name'] as string),
+    );
+  } finally {
+    mem.close();
+  }
+}
+
+function columnsOf(db: DatabaseSyncType, tables: string[]): Map<string, Set<string>> {
+  const stmt = db.prepare('SELECT name FROM pragma_table_info(?)');
+  return new Map(
+    tables.map((t) => [t, new Set((stmt.all(t) as Row[]).map((r) => r['name'] as string))]),
+  );
+}
+
+/** See `SqliteStoreOptions.readOnly`. */
+function openReadOnly(location: string | undefined): DatabaseSyncType {
+  if (location === undefined || location === '' || location === ':memory:') {
+    throw new Error(
+      'a read-only SqliteStore needs the path of an existing ledger file: an in-memory or temporary database opened read-only is empty and stays empty',
+    );
+  }
+  // Fails, and creates nothing, when the file does not exist.
+  const db = new DatabaseSync(location, { readOnly: true });
+  try {
+    // A second refusal under the flag, for a runtime that ever opens this
+    // without honouring it. It refuses every statement this store can issue;
+    // it would not refuse a journal-mode change, and nothing here issues one.
+    db.exec('PRAGMA query_only = ON');
+    db.exec('PRAGMA busy_timeout = 5000');
+    const declared = declaredColumns();
+    const present = columnsOf(db, [...declared.keys()]);
+    const missing: string[] = [];
+    for (const [table, columns] of declared) {
+      const have = present.get(table)!;
+      if (have.size === 0) {
+        missing.push(table);
+        continue;
+      }
+      for (const c of columns) if (!have.has(c)) missing.push(`${table}.${c}`);
+    }
+    if (missing.length > 0) {
+      throw new Error(
+        `ledger file ${location} predates this store, missing ${missing.join(', ')}. ` +
+          'A read-only store cannot add them; a writable SqliteStore adds them on open, which the process that owns the file does on start.',
+      );
+    }
+    return db;
+  } catch (err) {
+    db.close();
+    throw err;
+  }
+}
+
 export interface SqliteStoreOptions {
   /** File path, or `:memory:`. */
   location?: string;
   clock?: () => number;
+  /**
+   * Open an existing ledger file without changing it, for a reader beside the
+   * process that owns it: a status command, a console, an audit export.
+   *
+   * A writable open is not that, even when nothing is spent through it. The
+   * constructor sets the journal mode, creates any table the file lacks, and
+   * adds any column it lacks, so opening a file to look at it can migrate it out
+   * from under the gateway that owns it. Read-only skips all of that, opens the
+   * file with SQLite's own read-only flag so the engine refuses every write, and
+   * refuses `transact` outright.
+   *
+   * It needs a file that exists and already has every table and column this
+   * store reads. A file that predates one is refused by name rather than read
+   * with fields missing, and the remedy is the writable open the owner already
+   * does on start.
+   *
+   * The database file is not touched. Its WAL sidecars can be: SQLite creates
+   * `-wal` and `-shm` to read a WAL database that nobody else has open, and a
+   * read-only connection cannot checkpoint them away on close. The log is left
+   * empty, and the owner's next close removes both.
+   */
+  readOnly?: boolean;
 }
 
 export class SqliteStore implements LedgerStore {
   private readonly db: DatabaseSyncType;
   private readonly clock: () => number;
+  private readonly readOnly: boolean;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(opts: SqliteStoreOptions = {}) {
-    this.db = new DatabaseSync(opts.location ?? ':memory:');
     this.clock = opts.clock ?? (() => Math.floor(Date.now() / 1000));
+    this.readOnly = opts.readOnly === true;
+    if (this.readOnly) {
+      this.db = openReadOnly(opts.location);
+      return;
+    }
+    this.db = new DatabaseSync(opts.location ?? ':memory:');
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA busy_timeout = 5000');
     this.db.exec(SCHEMA);
@@ -486,6 +580,15 @@ export class SqliteStore implements LedgerStore {
    * and `reserve` holds its transaction open across `await`s by construction.
    */
   async transact<T>(fn: (tx: LedgerTx) => Promise<T>): Promise<T> {
+    // Refused before `BEGIN`, not left to the engine: SQLite grants
+    // `BEGIN IMMEDIATE` on a read-only connection, so a closure that only reads
+    // would commit cleanly and a caller would take the critical section for
+    // granted where none can exist.
+    if (this.readOnly) {
+      throw new Error(
+        'this SqliteStore was opened read-only: transact is refused, and every Ledger method that changes state goes through it',
+      );
+    }
     const run = this.queue.then(async () => {
       this.db.exec('BEGIN IMMEDIATE');
       try {
@@ -517,6 +620,12 @@ export class SqliteStore implements LedgerStore {
    * writes. Both callers of `read` on a decision path — the two reconcilers —
    * re-read and re-check status inside `transact` before acting, which is the
    * only reason this is safe.
+   *
+   * A read-only store is a second connection, so it has the opposite property:
+   * it sees what the owner has committed and never a transaction still open,
+   * and in WAL mode it does not wait on the owner's write lock to see it. Each
+   * statement is its own snapshot, so a method that reads twice, as
+   * `budgetTree` does, can straddle a commit between the two.
    */
   async read<T>(fn: (tx: LedgerTx) => Promise<T>): Promise<T> {
     return fn(this.tx);
