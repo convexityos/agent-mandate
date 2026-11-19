@@ -16,7 +16,7 @@ valuable findings in this project were mitigations that **existed and did not
 work**, and a catalogue that cannot tell the difference is worse than no
 catalogue at all.
 
-59 entries. 58 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
+60 entries. 59 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
 
 Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run threats`.
 
@@ -960,6 +960,22 @@ Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run t
 **Where.** [`src/receipt.ts`](../src/receipt.ts), [`src/ledger/ledger.ts`](../src/ledger/ledger.ts)
 
 **Proven by.** [`test/receipt-privacy.test.ts`](../test/receipt-privacy.test.ts) — *hides cleartext mandate JTIs and principal while preserving indexed subtree rollup*<br>[`test/receipt-privacy.test.ts`](../test/receipt-privacy.test.ts) — *produces unlinkable path and principal tags across spends under the same subtree while allowing salted audit*<br>[`test/receipt-privacy.test.ts`](../test/receipt-privacy.test.ts) — *rejects a receipt privacy salt shorter than 16 bytes*
+
+---
+
+### Unbounded mandate or total substitution across AP2 / ACP interop
+
+<sub>`interop-mandate-widening` · §12.5 · preventive control</sub>
+
+**The attack.** Feed an AP2 IntentMandate without a cap, drop user cart confirmation or refundability during translation, or reprice an ACP checkout session between authorization and completion.
+
+**Why it works.** Interop adapters are trust boundaries. Treating missing external fields as unconstrained `am/1` caveats turns a narrow external intent into an unbounded mandate, and submitting ACP `complete` without checking the session total lets a merchant charge more than the Ledger reserved.
+
+**The check.** AP2 and ACP inbound adapters fail closed on missing caps, expired timestamps, wildcard merchants, unconfirmed carts (`step_up: { over: 0 }`), and refundability downgrades (`immediate` refused). Outbound `AcpRail` refuses sub-minor-unit rounding, verifies the checkout session currency and total before `POST /complete`, and reconciles indeterminate completions via `GET /checkout_sessions/{id}`.
+
+**Where.** [`src/interop/ap2.ts`](../src/interop/ap2.ts), [`src/interop/acp.ts`](../src/interop/acp.ts)
+
+**Proven by.** [`test/interop.ap2-acp.test.ts`](../test/interop.ap2-acp.test.ts) — *refuses to mint an unbounded mandate when AP2 IntentMandate omits a cap*<br>[`test/interop.ap2-acp.test.ts`](../test/interop.ap2-acp.test.ts) — *enforces step-up in Ledger when AP2 IntentMandate requires user cart confirmation*<br>[`test/interop.ap2-acp.test.ts`](../test/interop.ap2-acp.test.ts) — *refuses immediate settlement when AP2 IntentMandate requires refundability*<br>[`test/interop.ap2-acp.test.ts`](../test/interop.ap2-acp.test.ts) — *refuses ACP completion when merchant reprices the checkout session total*<br>[`test/interop.ap2-acp.test.ts`](../test/interop.ap2-acp.test.ts) — *holds indeterminate ACP 5xx completion in settling and reconciles via session status*
 
 ---
 

@@ -34,3 +34,5 @@ export * from './chain/networks.js';
 export * from './mcp/jsonrpc.js';
 export * from './mcp/gateway.js';
 export * from './mcp/stdio.js';
+export * from './interop/ap2.js';
+export * from './interop/acp.js';
