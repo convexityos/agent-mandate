@@ -911,6 +911,24 @@ have one is substantially harder than building it in.
 `path` makes rollup by principal, task, or subtree a single indexed query.
 `resp_hash` is what makes conditional settlement enforceable (§12).
 
+### 11.1 Receipt path privacy
+
+When receipts are shared with merchants or external verifiers, cleartext `path`
+entries and `principal` values reveal internal mandate identifiers and
+delegation hierarchy topology. A Ledger MAY configure receipt path privacy with
+one of three modes, recorded in the optional `path_mode` claim (`plain` omits
+`path_mode` for wire compatibility):
+
+| Mode | `path` and `principal` encoding | Tradeoff |
+|---|---|---|
+| `plain` (default) | Cleartext mandate JTIs and root principal id (`path_mode` omitted). | Direct human readability and single-query rollup; exposes org topology to receipt readers. |
+| `salted` | Domain-separated `hmac-sha256:<hex>` tags keyed by a Ledger-held secret salt (minimum 16 bytes), binding each entry to its root and position. | Hides cleartext mandate ids while preserving O(1) indexed subtree rollup via deterministic salted tags; an observer can still correlate receipts that share a subtree tag. |
+| `blinded` | Same keyed HMAC-SHA256 construction additionally bound to the receipt's `spend` id. | Prevents external observers from clustering spends across receipts; auditing or rolling up requires holding the salt and scanning receipts (O(N)). |
+
+The Ledger **MUST** reject salts shorter than 16 bytes for `salted` and
+`blinded` modes, and verification of a claimed cleartext path against a
+privacy-encoded receipt **MUST** use constant-time comparison.
+
 ---
 
 ## 12. Settlement modes
@@ -1514,6 +1532,7 @@ still valid.
 | Ledger outage as unmetered spending | The enforcement layer denies by default when the Ledger is unreachable | `ledger-outage-as-unmetered-spending` |
 | A refusal mistaken for a transport error | Refusals are responses carrying the §15 code, not exceptions (§15) | `refusal-mistaken-for-a-transport-error` |
 | Stale or mutated 402 quote replay | `quote_hash` binds the canonical URI and exact 402 challenge bytes into spend tokens, directives, and receipts (§14.1, §14.5) | `stale-quote-replay` |
+| Org topology leaked via receipt `path` | Optional `salted` (indexed rollup) and `blinded` (per-spend unlinkable) HMAC-SHA256 path modes hide mandate ids (§11) | `receipt-path-topology-leak` |
 | Key compromise at depth *n* | Blast radius limited to that subtree's caveats; short `exp` + subtree revoke (§5.2) | `key-compromise-at-depth` |
 | Clock skew abuse | ±60s hard tolerance; Ledger clock authoritative online (§4.5) | `clock-skew-abuse` |
 | Ledger compromise | Full compromise of the principal's funds. Ledger keys **MUST** be in an HSM; receipts are dual-signed so merchant records provide independent reconstruction. | `ledger-compromise` |
@@ -1584,9 +1603,11 @@ else is additive.
 4. **Delegation to non-agent principals.** Human-to-human sub-delegation of a
    spending mandate is structurally identical; whether to model it is a product
    question with regulatory consequences.
-5. **Privacy of `path` in receipts.** It reveals org structure to whoever reads the
-   receipt. A salted-hash form would preserve rollup while hiding topology, at the
-   cost of making audit harder.
+5. ~~**Privacy of `path` in receipts.**~~ **Answered, in §11.1.** Ledgers can
+   keep `plain` (default) or enable keyed HMAC-SHA256 encoding (`salted` to
+   hide cleartext mandate ids while preserving O(1) indexed subtree rollup, or
+   `blinded` keyed per `spend` id to prevent cross-receipt clustering at the
+   cost of O(N) salted audit scans).
 6. **Interop with AP2 / ACP.** Both are plausible rails or peers beneath this
    control plane; x402 is implemented (§12.2). An adapter mapping an AP2 Intent
    Mandate onto a root `am/1` mandate looks tractable and would be worth

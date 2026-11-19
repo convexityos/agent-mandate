@@ -16,7 +16,7 @@ valuable findings in this project were mitigations that **existed and did not
 work**, and a catalogue that cannot tell the difference is worse than no
 catalogue at all.
 
-58 entries. 57 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
+59 entries. 58 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
 
 Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run threats`.
 
@@ -944,6 +944,22 @@ Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run t
 **Where.** [`src/quote.ts`](../src/quote.ts), [`src/http/merchant.ts`](../src/http/merchant.ts), [`src/rail/x402.ts`](../src/rail/x402.ts), [`src/rail/x402-noncustodial.ts`](../src/rail/x402-noncustodial.ts)
 
 **Proven by.** [`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *rejects a stale cheap quote after the merchant reprices the resource*<br>[`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *rejects an expired quote even when the spend token and signature are fresh*<br>[`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *refuses custodial x402 settlement and refunds when live PAYMENT-REQUIRED mutates payTo or amount*<br>[`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *binds verbatim PAYMENT-REQUIRED header in non-custodial X402NonCustodialRail directive*
+
+---
+
+### Org topology leaked via receipt `path`
+
+<sub>`receipt-path-topology-leak` · §11.1 · preventive control</sub>
+
+**The attack.** Inspect signed receipts shared with merchants or external verifiers to read cleartext internal mandate names or reconstruct department and subagent delegation hierarchies.
+
+**Why it works.** Cleartext `path` arrays hand the org chart to anyone who reads a receipt, undercutting the §1.1 claim that merchants learn nothing about the principal delegation tree.
+
+**The check.** Optional `receiptPathPrivacy` modes encode `path` and `principal` using keyed HMAC-SHA256 with a minimum 16-byte secret salt: `salted` hides cleartext mandate ids while preserving O(1) indexed subtree rollup, and `blinded` salts per `spend` id so external readers cannot cluster spends across receipts.
+
+**Where.** [`src/receipt.ts`](../src/receipt.ts), [`src/ledger/ledger.ts`](../src/ledger/ledger.ts)
+
+**Proven by.** [`test/receipt-privacy.test.ts`](../test/receipt-privacy.test.ts) — *hides cleartext mandate JTIs and principal while preserving indexed subtree rollup*<br>[`test/receipt-privacy.test.ts`](../test/receipt-privacy.test.ts) — *produces unlinkable path and principal tags across spends under the same subtree while allowing salted audit*<br>[`test/receipt-privacy.test.ts`](../test/receipt-privacy.test.ts) — *rejects a receipt privacy salt shorter than 16 bytes*
 
 ---
 

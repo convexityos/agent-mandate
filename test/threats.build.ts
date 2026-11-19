@@ -1001,6 +1001,23 @@ export const THREATS: ThreatEntry[] = [
     ],
     control: 'preventive',
   },
+  {
+    id: 'receipt-path-topology-leak',
+    title: 'Org topology leaked via receipt `path`',
+    attack:
+      'Inspect signed receipts shared with merchants or external verifiers to read cleartext internal mandate names or reconstruct department and subagent delegation hierarchies.',
+    why: 'Cleartext `path` arrays hand the org chart to anyone who reads a receipt, undercutting the §1.1 claim that merchants learn nothing about the principal delegation tree.',
+    check:
+      'Optional `receiptPathPrivacy` modes encode `path` and `principal` using keyed HMAC-SHA256 with a minimum 16-byte secret salt: `salted` hides cleartext mandate ids while preserving O(1) indexed subtree rollup, and `blinded` salts per `spend` id so external readers cannot cluster spends across receipts.',
+    spec: ['§11.1'],
+    code: ['src/receipt.ts', 'src/ledger/ledger.ts'],
+    test: [
+      t('test/receipt-privacy.test.ts', 'hides cleartext mandate JTIs and principal while preserving indexed subtree rollup'),
+      t('test/receipt-privacy.test.ts', 'produces unlinkable path and principal tags across spends under the same subtree while allowing salted audit'),
+      t('test/receipt-privacy.test.ts', 'rejects a receipt privacy salt shorter than 16 bytes'),
+    ],
+    control: 'preventive',
+  },
 
   // ------------------------------------------------------------- residual
   {

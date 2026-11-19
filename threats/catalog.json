@@ -1578,6 +1578,35 @@
     "control": "preventive"
   },
   {
+    "id": "receipt-path-topology-leak",
+    "title": "Org topology leaked via receipt `path`",
+    "attack": "Inspect signed receipts shared with merchants or external verifiers to read cleartext internal mandate names or reconstruct department and subagent delegation hierarchies.",
+    "why": "Cleartext `path` arrays hand the org chart to anyone who reads a receipt, undercutting the §1.1 claim that merchants learn nothing about the principal delegation tree.",
+    "check": "Optional `receiptPathPrivacy` modes encode `path` and `principal` using keyed HMAC-SHA256 with a minimum 16-byte secret salt: `salted` hides cleartext mandate ids while preserving O(1) indexed subtree rollup, and `blinded` salts per `spend` id so external readers cannot cluster spends across receipts.",
+    "spec": [
+      "§11.1"
+    ],
+    "code": [
+      "src/receipt.ts",
+      "src/ledger/ledger.ts"
+    ],
+    "test": [
+      {
+        "file": "test/receipt-privacy.test.ts",
+        "name": "hides cleartext mandate JTIs and principal while preserving indexed subtree rollup"
+      },
+      {
+        "file": "test/receipt-privacy.test.ts",
+        "name": "produces unlinkable path and principal tags across spends under the same subtree while allowing salted audit"
+      },
+      {
+        "file": "test/receipt-privacy.test.ts",
+        "name": "rejects a receipt privacy salt shorter than 16 bytes"
+      }
+    ],
+    "control": "preventive"
+  },
+  {
     "id": "ledger-compromise",
     "title": "Ledger compromise",
     "attack": "Compromise the Ledger and mint whatever spend tokens you like.",
