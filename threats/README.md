@@ -16,7 +16,7 @@ valuable findings in this project were mitigations that **existed and did not
 work**, and a catalogue that cannot tell the difference is worse than no
 catalogue at all.
 
-57 entries. 56 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
+58 entries. 57 cite at least one test; 1 cannot, and 4 carry a stated gap. Those are listed first, because an unproven mitigation is what this document exists to surface rather than to bury.
 
 Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run threats`.
 
@@ -928,6 +928,22 @@ Generated from [`test/threats.build.ts`](../test/threats.build.ts) by `npm run t
 **Where.** [`src/http/mandated-fetch.ts`](../src/http/mandated-fetch.ts)
 
 **Proven by.** [`test/mandated-fetch.test.ts`](../test/mandated-fetch.test.ts) — *returns problem details rather than throwing when the budget is gone*<br>[`test/mandated-fetch.test.ts`](../test/mandated-fetch.test.ts) — *marks its own refusals so they are not mistaken for the merchant s*<br>[`test/mandated-fetch.test.ts`](../test/mandated-fetch.test.ts) — *relays a ledger refusal as a refusal, not as a transport error*
+
+---
+
+### Stale or mutated 402 quote replay
+
+<sub>`stale-quote-replay` · §14.1, §14.5 · preventive control</sub>
+
+**The attack.** Present a spend token minted from an expired, repriced, lifted, or mutated 402 challenge, or settle an x402 payment after the storefront silently swapped payTo or terms.
+
+**Why it works.** Without cryptographic quote binding, `quote_id` is an unchecked label: a spend token remains valid for its own TTL after the quote expires or the resource reprices, and a custodial x402 rail that only compares amounts misses `payTo` or domain mutations.
+
+**The check.** Domain-separated SHA-256 `quote_hash` binds canonical URI and exact 402 challenge bytes into reservations, spend tokens, directives, and receipts. Merchants with `QuoteStore` or `requireQuoteBinding` enforce single-use, expiry, digest, price, schema, and settle-mode equality; x402 rails verify the digest before signing or preparing directives.
+
+**Where.** [`src/quote.ts`](../src/quote.ts), [`src/http/merchant.ts`](../src/http/merchant.ts), [`src/rail/x402.ts`](../src/rail/x402.ts), [`src/rail/x402-noncustodial.ts`](../src/rail/x402-noncustodial.ts)
+
+**Proven by.** [`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *rejects a stale cheap quote after the merchant reprices the resource*<br>[`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *rejects an expired quote even when the spend token and signature are fresh*<br>[`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *refuses custodial x402 settlement and refunds when live PAYMENT-REQUIRED mutates payTo or amount*<br>[`test/quote-binding.test.ts`](../test/quote-binding.test.ts) — *binds verbatim PAYMENT-REQUIRED header in non-custodial X402NonCustodialRail directive*
 
 ---
 

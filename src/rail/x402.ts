@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { Money } from '../money.js';
 import type { Reservation } from '../ledger/store.js';
+import { quoteHashFromX402Response, quotesMatch } from '../quote.js';
 import { type PayResult, type RailStatus, type SettlementRail, toAtomicUnits } from './rail.js';
 
 /**
@@ -234,6 +235,20 @@ export class X402Rail implements SettlementRail {
     const challenge = parseX402Challenge(challengeRes);
     if (challenge === null) {
       return { ok: false, terminal: true, detail: 'unparseable x402 challenge' };
+    }
+
+    // §18 #3: verify the live 402 challenge bytes match the quote the agent
+    // reserved against, catching repricing, payTo swaps, or domain changes
+    // before signing an EIP-3009 transfer authorization.
+    if (r.quoteHash !== undefined) {
+      const liveHash = quoteHashFromX402Response(r.resource, challengeRes);
+      if (liveHash === null || !quotesMatch(r.quoteHash, liveHash)) {
+        return {
+          ok: false,
+          terminal: true,
+          detail: `x402 challenge digest mismatch: reserved ${r.quoteHash}, live ${liveHash ?? 'none'}`,
+        };
+      }
     }
 
     const accepts = challenge.accepts.find((a) => this.matches(a));

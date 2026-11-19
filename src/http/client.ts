@@ -1,4 +1,6 @@
 import type { AgentKey } from '../sign.js';
+import { quoteHashForHttpChallenge } from '../quote.js';
+import { canonicalizeUri } from '../uri.js';
 import {
   ACCEPT_PAYMENT,
   PAYMENT,
@@ -23,6 +25,19 @@ export function challengeFrom(res: PaidResponse): Challenge | null {
   return parseChallenge(getHeader(res.headers, ACCEPT_PAYMENT) ?? undefined);
 }
 
+/**
+ * Computes the cryptographic quote binding digest for a §14 402 response
+ * using the canonical request URI and exact `Accept-Payment` header bytes.
+ */
+export function challengeHashFrom(url: string, res: PaidResponse): string | null {
+  if (res.status !== 402) return null;
+  const raw = getHeader(res.headers, ACCEPT_PAYMENT);
+  if (raw === null) return null;
+  const canonicalUri = canonicalizeUri(url);
+  if (canonicalUri === null) return null;
+  return quoteHashForHttpChallenge(canonicalUri, raw);
+}
+
 export function receiptFrom(res: PaidResponse): { id: string; ledger: string } | null {
   return parseReceiptHeader(getHeader(res.headers, PAYMENT_RECEIPT) ?? undefined);
 }
@@ -41,7 +56,7 @@ export interface AttachPaymentOptions {
  * Order matters: the `Payment` header is added to the request *before* signing,
  * because it is one of the covered components. Signing first and appending the
  * payment afterwards produces a signature that verifies while covering nothing
- * about what is being paid for — which is a token any interceptor can lift onto
+ * about what is being paid for, which is a token any interceptor can lift onto
  * a different request.
  */
 export function attachPayment(
@@ -66,11 +81,19 @@ export function attachPayment(
 
 export type Transport = (req: SignableRequest) => Promise<PaidResponse>;
 
+export interface ChallengeBindingMeta {
+  /** SHA-256 binding digest over canonical request URI and exact `Accept-Payment` bytes. */
+  quoteHash?: string;
+}
+
 export interface PayAndRetryOptions {
   key: AgentKey;
   clock: () => number;
-  /** Exchange a challenge for a spend token — normally a call to the ledger. */
-  reserve: (challenge: Challenge) => Promise<{ ok: true; token: string } | { ok: false; detail: string }>;
+  /** Exchange a challenge for a spend token, normally a call to the ledger. */
+  reserve: (
+    challenge: Challenge,
+    meta?: ChallengeBindingMeta,
+  ) => Promise<{ ok: true; token: string } | { ok: false; detail: string }>;
 }
 
 export type PayAndRetryResult =
@@ -78,7 +101,7 @@ export type PayAndRetryResult =
   | { ok: false; detail: string; response?: PaidResponse };
 
 /**
- * Request → 402 → reserve → signed retry. Exactly one retry: a second 402 after
+ * Request -> 402 -> reserve -> signed retry. Exactly one retry: a second 402 after
  * paying means the price moved or the token was rejected, and looping on that is
  * how an agent spends a budget on nothing.
  */
@@ -99,7 +122,11 @@ export async function payAndRetry(
     return { ok: false, detail: 'unparseable payment challenge', response: first };
   }
 
-  const reserved = await opts.reserve(challenge);
+  const quoteHash = challengeHashFrom(req.url, first);
+  const reserved = await opts.reserve(
+    challenge,
+    quoteHash !== null ? { quoteHash } : {},
+  );
   if (!reserved.ok) return { ok: false, detail: reserved.detail, response: first };
 
   const headers = attachPayment(req, {

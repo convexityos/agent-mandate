@@ -24,7 +24,9 @@ export type ErrorCode =
   | 'step_up_required'
   | 'token_expired'
   | 'token_replayed'
-  | 'breaker_tripped';
+  | 'breaker_tripped'
+  | 'quote_mismatch'
+  | 'quote_expired';
 
 export const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   chain_invalid: 400,
@@ -56,6 +58,11 @@ export const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   token_expired: 401,
   token_replayed: 409,
   breaker_tripped: 403,
+  // 409 Conflict: the quote hash, terms, or expiry disagree with the merchant's
+  // current state. Distinct from 402 so clients do not mistake a rejected
+  // payment for a fresh unattempted challenge.
+  quote_mismatch: 409,
+  quote_expired: 409,
 };
 
 export const PROBLEM_TYPE_BASE = 'https://agentmandate.org/errors/';

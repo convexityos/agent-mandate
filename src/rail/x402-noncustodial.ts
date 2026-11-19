@@ -1,4 +1,11 @@
 import type { Reservation } from '../ledger/store.js';
+import {
+  quoteHashForX402Challenge,
+  quoteHashFromX402Response,
+  quotesMatch,
+  type X402ChallengeLikeResponse,
+} from '../quote.js';
+import { canonicalJson } from '../receipt.js';
 import { toAtomicUnits } from './rail.js';
 import type { RailStatus } from './rail.js';
 import {
@@ -16,6 +23,7 @@ import {
   amountOf,
   chainIdFromCaip2,
   nonceFor,
+  parseX402Challenge,
   refFor,
 } from './x402.js';
 
@@ -68,6 +76,62 @@ export interface X402Intent extends Record<string, unknown> {
   network: string;
   domain: Eip712Domain;
   authorization: Eip3009Authorization;
+  /** Cryptographic digest of the bound 402 challenge when supplied at reserve time. */
+  quoteHash?: string;
+}
+
+function parseQuotedX402(
+  resource: string,
+  quote: unknown,
+): { challenge: X402Challenge; quoteHash: string } | null {
+  if (typeof quote === 'string' && quote.length > 0) {
+    try {
+      const parsed = JSON.parse(Buffer.from(quote, 'base64').toString('utf8')) as unknown;
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        Array.isArray((parsed as Record<string, unknown>)['accepts']) &&
+        typeof (parsed as Record<string, unknown>)['x402Version'] === 'number'
+      ) {
+        return {
+          challenge: parsed as X402Challenge,
+          quoteHash: quoteHashForX402Challenge(resource, quote),
+        };
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  if (typeof quote !== 'object' || quote === null) return null;
+  const obj = quote as Record<string, unknown>;
+
+  if (obj['status'] === 402 && typeof obj['headers'] === 'object' && obj['headers'] !== null) {
+    const res = obj as unknown as X402ChallengeLikeResponse;
+    const challenge = parseX402Challenge({
+      status: res.status,
+      headers: Object.fromEntries(
+        Object.entries(res.headers).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v]),
+      ),
+      body: res.body,
+    });
+    const hash = quoteHashFromX402Response(resource, res);
+    if (challenge !== null && hash !== null) {
+      return { challenge, quoteHash: hash };
+    }
+    return null;
+  }
+
+  if (Array.isArray(obj['accepts'])) {
+    const challenge = obj as unknown as X402Challenge;
+    return {
+      challenge,
+      quoteHash: quoteHashForX402Challenge(resource, canonicalJson(challenge)),
+    };
+  }
+
+  return null;
 }
 
 export class X402NonCustodialRail implements NonCustodialRail {
@@ -88,11 +152,24 @@ export class X402NonCustodialRail implements NonCustodialRail {
     return this.cfg.payer;
   }
 
-  /** `quote` is the merchant's x402 challenge, forwarded by the agent verbatim. */
+  /**
+   * `quote` is the merchant's x402 challenge, forwarded by the agent verbatim
+   * as a decoded `X402Challenge`, raw base64 `PAYMENT-REQUIRED` header string,
+   * or full 402 response.
+   */
   prepare(r: Reservation, quote: unknown): PrepareResult {
-    const challenge = quote as X402Challenge | undefined;
-    if (challenge === undefined || !Array.isArray(challenge.accepts)) {
+    const parsed = parseQuotedX402(r.resource, quote);
+    if (parsed === null) {
       return { ok: false, terminal: true, detail: 'no x402 challenge supplied' };
+    }
+    const { challenge, quoteHash: observedHash } = parsed;
+
+    if (r.quoteHash !== undefined && !quotesMatch(r.quoteHash, observedHash)) {
+      return {
+        ok: false,
+        terminal: true,
+        detail: `x402 challenge digest mismatch: reserved ${r.quoteHash}, supplied ${observedHash}`,
+      };
     }
 
     const accepts = challenge.accepts.find(
@@ -167,6 +244,7 @@ export class X402NonCustodialRail implements NonCustodialRail {
         // The LEDGER chooses the nonce. This is what makes confirm() possible.
         nonce: nonceFor(r.id),
       },
+      ...(r.quoteHash !== undefined ? { quoteHash: r.quoteHash } : {}),
     };
 
     return {

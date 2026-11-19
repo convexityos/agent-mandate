@@ -42,7 +42,7 @@ export interface MintRequest {
   tokens: string[];
   resource: string;
   amount: Money;
-  quote: { quoteId: string; schema?: string };
+  quote: { quoteId: string; quoteHash?: string; schema?: string };
   presenterJkt: string;
   idempotencyKey: string;
   taskId?: string;
@@ -69,6 +69,7 @@ export function localMint(ledger: Ledger): MintSource {
         idempotencyKey: req.idempotencyKey,
         quote: {
           quoteId: req.quote.quoteId,
+          ...(req.quote.quoteHash !== undefined ? { quoteHash: req.quote.quoteHash } : {}),
           ...(req.quote.schema !== undefined ? { schema: req.quote.schema } : {}),
         },
         request: {
@@ -281,13 +282,14 @@ export function mandatedFetch(opts: MandatedFetchOptions): typeof fetch {
     }, {
       key: opts.key,
       clock,
-      reserve: async (challenge: Challenge) => {
+      reserve: async (challenge: Challenge, meta) => {
         const minted = await opts.mint.mint({
           tokens: opts.tokens,
           resource: url,
           amount: challenge.amount,
           quote: {
             quoteId: challenge.quoteId,
+            ...(meta?.quoteHash !== undefined ? { quoteHash: meta.quoteHash } : {}),
             ...(challenge.schema !== undefined ? { schema: challenge.schema } : {}),
           },
           presenterJkt: opts.key.jkt,

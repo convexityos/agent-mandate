@@ -983,6 +983,24 @@ export const THREATS: ThreatEntry[] = [
     ],
     control: 'preventive',
   },
+  {
+    id: 'stale-quote-replay',
+    title: 'Stale or mutated 402 quote replay',
+    attack:
+      'Present a spend token minted from an expired, repriced, lifted, or mutated 402 challenge, or settle an x402 payment after the storefront silently swapped payTo or terms.',
+    why: 'Without cryptographic quote binding, `quote_id` is an unchecked label: a spend token remains valid for its own TTL after the quote expires or the resource reprices, and a custodial x402 rail that only compares amounts misses `payTo` or domain mutations.',
+    check:
+      'Domain-separated SHA-256 `quote_hash` binds canonical URI and exact 402 challenge bytes into reservations, spend tokens, directives, and receipts. Merchants with `QuoteStore` or `requireQuoteBinding` enforce single-use, expiry, digest, price, schema, and settle-mode equality; x402 rails verify the digest before signing or preparing directives.',
+    spec: ['§14.1', '§14.5'],
+    code: ['src/quote.ts', 'src/http/merchant.ts', 'src/rail/x402.ts', 'src/rail/x402-noncustodial.ts'],
+    test: [
+      t('test/quote-binding.test.ts', 'rejects a stale cheap quote after the merchant reprices the resource'),
+      t('test/quote-binding.test.ts', 'rejects an expired quote even when the spend token and signature are fresh'),
+      t('test/quote-binding.test.ts', 'refuses custodial x402 settlement and refunds when live PAYMENT-REQUIRED mutates payTo or amount'),
+      t('test/quote-binding.test.ts', 'binds verbatim PAYMENT-REQUIRED header in non-custodial X402NonCustodialRail directive'),
+    ],
+    control: 'preventive',
+  },
 
   // ------------------------------------------------------------- residual
   {
