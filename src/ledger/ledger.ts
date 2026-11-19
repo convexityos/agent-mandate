@@ -8,7 +8,14 @@ import type { ErrorCode } from '../errors.js';
 import { parseDuration } from '../duration.js';
 import { type Money, fromScaled, toScaled } from '../money.js';
 import { isQuoteHash } from '../quote.js';
-import { type Receipt, type ReceiptClaims, signReceipt } from '../receipt.js';
+import {
+  type Receipt,
+  type ReceiptClaims,
+  type ReceiptPathPrivacyConfig,
+  assertReceiptSalt,
+  encodeReceiptPath,
+  signReceipt,
+} from '../receipt.js';
 import { type AgentKey } from '../sign.js';
 import {
   DEFAULT_SPEND_TTL_SECONDS,
@@ -180,6 +187,12 @@ export interface LedgerConfig {
   clock?: () => number;
   idFactory?: (prefix: string) => string;
   resolveKey?: KeyResolver;
+  /**
+   * §18 #5: optional privacy encoding for `path` and `principal` in signed
+   * receipts (`salted` for indexed rollup without cleartext JTIs, or `blinded`
+   * for per-spend unlinkable commitments). Defaults to cleartext (`plain`).
+   */
+  receiptPathPrivacy?: ReceiptPathPrivacyConfig;
 }
 
 export interface ReserveRequest {
@@ -310,7 +323,13 @@ export class Ledger {
   private readonly cfg: Required<
     Omit<
       LedgerConfig,
-      'breakers' | 'resolveKey' | 'rail' | 'nonCustodialRail' | 'approver' | 'audit'
+      | 'breakers'
+      | 'resolveKey'
+      | 'rail'
+      | 'nonCustodialRail'
+      | 'approver'
+      | 'audit'
+      | 'receiptPathPrivacy'
     >
   > & {
     breakers: BreakerConfig;
@@ -319,6 +338,7 @@ export class Ledger {
     nonCustodialRail?: NonCustodialRail;
     approver?: Approver;
     audit?: AuditSink;
+    receiptPathPrivacy?: ReceiptPathPrivacyConfig;
   };
 
   constructor(config: LedgerConfig) {
@@ -326,6 +346,12 @@ export class Ledger {
       throw new Error(
         'configure `rail` or `nonCustodialRail`, not both: they disagree about who holds the funds',
       );
+    }
+    if (
+      config.receiptPathPrivacy !== undefined &&
+      config.receiptPathPrivacy.mode !== 'plain'
+    ) {
+      assertReceiptSalt(config.receiptPathPrivacy.salt);
     }
     this.cfg = {
       url: config.url,
@@ -346,6 +372,9 @@ export class Ledger {
       ...(config.rail !== undefined ? { rail: config.rail } : {}),
       ...(config.nonCustodialRail !== undefined
         ? { nonCustodialRail: config.nonCustodialRail }
+        : {}),
+      ...(config.receiptPathPrivacy !== undefined
+        ? { receiptPathPrivacy: config.receiptPathPrivacy }
         : {}),
     };
   }
@@ -1830,15 +1859,17 @@ export class Ledger {
     now: number,
     input: SettleInput = {},
   ): Receipt {
+    const encoded = encodeReceiptPath(r.path, r.root, r.id, this.cfg.receiptPathPrivacy);
     const claims: ReceiptClaims = {
       v: PROTOCOL_VERSION,
       typ: 'receipt',
       jti: this.cfg.idFactory('rcp'),
       spend: r.id,
       chain_hash: r.chainHash,
-      path: r.path,
+      path: encoded.path,
+      ...(encoded.path_mode !== undefined ? { path_mode: encoded.path_mode } : {}),
       agent: r.agent,
-      principal: r.root,
+      principal: encoded.principal,
       task: r.taskId,
       merchant: r.merchant,
       res: r.resource,
