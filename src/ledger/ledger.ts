@@ -7,6 +7,7 @@ import type { Caveats } from '../caveats.js';
 import type { ErrorCode } from '../errors.js';
 import { parseDuration } from '../duration.js';
 import { type Money, fromScaled, toScaled } from '../money.js';
+import { isQuoteHash } from '../quote.js';
 import { type Receipt, type ReceiptClaims, signReceipt } from '../receipt.js';
 import { type AgentKey } from '../sign.js';
 import {
@@ -193,7 +194,7 @@ export interface ReserveRequest {
    * non-custodial path pins into a directive without ever contacting the
    * merchant itself.
    */
-  quote?: { quoteId?: string; schema?: string; rail?: unknown };
+  quote?: { quoteId?: string; quoteHash?: string; schema?: string; rail?: unknown };
   /**
    * §9 — makes this mint replay-safe.
    *
@@ -410,6 +411,17 @@ export class Ledger {
       return { ok: false, code: 'resource_not_covered', detail: 'uncanonicalizable resource' };
     }
 
+    if (req.quote?.quoteHash !== undefined && !isQuoteHash(req.quote.quoteHash)) {
+      this.emit('reserve.rejected', {
+        agent: verified.leaf.sub,
+        amount: req.request.amount,
+        resource: req.request.resource,
+        code: 'chain_invalid',
+        detail: 'malformed quoteHash',
+      });
+      return { ok: false, code: 'chain_invalid', detail: 'malformed quoteHash' };
+    }
+
     const amountScaled = toScaled(req.request.amount);
     const currency = req.request.amount.cur;
     const taskId = req.request.taskId ?? null;
@@ -446,6 +458,8 @@ export class Ledger {
         amountScaled,
         settle: effective.settle ?? 'immediate',
         schema: req.quote?.schema ?? null,
+        ...(req.quote?.quoteId !== undefined ? { quoteId: req.quote.quoteId } : {}),
+        ...(req.quote?.quoteHash !== undefined ? { quoteHash: req.quote.quoteHash } : {}),
         chainHash,
         status: 'reserved',
         createdAt: now,
@@ -755,6 +769,8 @@ export class Ledger {
         amountScaled,
         settle: effective.settle ?? 'immediate',
         schema: req.quote?.schema ?? null,
+        ...(req.quote?.quoteId !== undefined ? { quoteId: req.quote.quoteId } : {}),
+        ...(req.quote?.quoteHash !== undefined ? { quoteHash: req.quote.quoteHash } : {}),
         chainHash,
         status: 'reserved',
         createdAt: now,
@@ -776,6 +792,7 @@ export class Ledger {
         settle: reservation.settle,
         ...(req.quote?.schema !== undefined ? { schema: req.quote.schema } : {}),
         ...(req.quote?.quoteId !== undefined ? { quote_id: req.quote.quoteId } : {}),
+        ...(req.quote?.quoteHash !== undefined ? { quote_hash: req.quote.quoteHash } : {}),
         iat: now,
         exp: expiresAt,
         cnf: { jkt: verified.leaf.cnf.jkt },
@@ -1836,6 +1853,8 @@ export class Ledger {
       // against the rail's own records, which is most of what a receipt is for.
       ...(r.railName !== undefined ? { rail: r.railName } : {}),
       ...(r.railRef !== undefined ? { rail_ref: r.railRef } : {}),
+      ...(r.quoteId !== undefined ? { quote_id: r.quoteId } : {}),
+      ...(r.quoteHash !== undefined ? { quote_hash: r.quoteHash } : {}),
       status,
       ts: now,
     };

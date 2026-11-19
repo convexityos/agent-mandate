@@ -32,6 +32,7 @@ export interface SpendClaims {
   settle: Settle;
   schema?: string;
   quote_id?: string;
+  quote_hash?: string;
   iat: number;
   exp: number;
   cnf: { jkt: string };

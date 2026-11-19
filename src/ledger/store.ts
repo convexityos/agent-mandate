@@ -78,6 +78,8 @@ export interface Reservation {
   amountScaled: bigint;
   settle: Settle;
   schema: string | null;
+  quoteId?: string;
+  quoteHash?: string;
   chainHash: string;
   status: ReservationStatus;
   createdAt: number;

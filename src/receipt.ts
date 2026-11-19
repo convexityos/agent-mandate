@@ -35,6 +35,9 @@ export interface ReceiptClaims {
   /** Rail that moved the money, and its own reference (e.g. an on-chain tx hash). */
   rail?: string;
   rail_ref?: string;
+  /** Bound quote identity and challenge digest, when supplied at reserve time. */
+  quote_id?: string;
+  quote_hash?: string;
   status: ReservationStatus;
   ts: number;
 }

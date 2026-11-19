@@ -1513,6 +1513,7 @@ still valid.
 | Reaching the upstream server without the gateway | **Not preventable at this layer.** The gateway constrains a channel, not an agent | `routing-around-the-gateway` |
 | Ledger outage as unmetered spending | The enforcement layer denies by default when the Ledger is unreachable | `ledger-outage-as-unmetered-spending` |
 | A refusal mistaken for a transport error | Refusals are responses carrying the §15 code, not exceptions (§15) | `refusal-mistaken-for-a-transport-error` |
+| Stale or mutated 402 quote replay | `quote_hash` binds the canonical URI and exact 402 challenge bytes into spend tokens, directives, and receipts (§14.1, §14.5) | `stale-quote-replay` |
 | Key compromise at depth *n* | Blast radius limited to that subtree's caveats; short `exp` + subtree revoke (§5.2) | `key-compromise-at-depth` |
 | Clock skew abuse | ±60s hard tolerance; Ledger clock authoritative online (§4.5) | `clock-skew-abuse` |
 | Ledger compromise | Full compromise of the principal's funds. Ledger keys **MUST** be in an HSM; receipts are dual-signed so merchant records provide independent reconstruction. | `ledger-compromise` |
@@ -1573,9 +1574,13 @@ else is additive.
 2. **Escrow release incentives.** Under `escrow_schema` the payer decides whether
    it pays. Dual-signed receipts make a dishonest verdict adjudicable but do not
    prevent it. See §12.3 — this is the largest unresolved gap in the design.
-3. **Quote binding.** Should `quote_id` be cryptographically bound to the merchant's
-   402 response, so an agent cannot present a stale cheap quote against a
-   repriced resource?
+3. ~~**Quote binding.**~~ **Answered.** Domain-separated SHA-256 `quote_hash` binds
+   the canonical resource URI and exact 402 challenge bytes (`Accept-Payment` for
+   §14 HTTP, `PAYMENT-REQUIRED` or v1 body for x402) across the reservation, spend
+   token, directive, and receipt. Merchants enabling `QuoteStore` / `requireQuoteBinding`
+   reject expired, consumed, tampered, lifted, or repriced quotes with `quote_expired`
+   or `quote_mismatch` (HTTP 409); x402 rails verify the digest before signing EIP-3009
+   transfers or preparing directives.
 4. **Delegation to non-agent principals.** Human-to-human sub-delegation of a
    spending mandate is structurally identical; whether to model it is a product
    question with regulatory consequences.
