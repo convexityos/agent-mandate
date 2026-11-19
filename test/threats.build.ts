@@ -1018,6 +1018,25 @@ export const THREATS: ThreatEntry[] = [
     ],
     control: 'preventive',
   },
+  {
+    id: 'interop-mandate-widening',
+    title: 'Unbounded mandate or total substitution across AP2 / ACP interop',
+    attack:
+      'Feed an AP2 IntentMandate without a cap, drop user cart confirmation or refundability during translation, or reprice an ACP checkout session between authorization and completion.',
+    why: 'Interop adapters are trust boundaries. Treating missing external fields as unconstrained `am/1` caveats turns a narrow external intent into an unbounded mandate, and submitting ACP `complete` without checking the session total lets a merchant charge more than the Ledger reserved.',
+    check:
+      'AP2 and ACP inbound adapters fail closed on missing caps, expired timestamps, wildcard merchants, unconfirmed carts (`step_up: { over: 0 }`), and refundability downgrades (`immediate` refused). Outbound `AcpRail` refuses sub-minor-unit rounding, verifies the checkout session currency and total before `POST /complete`, and reconciles indeterminate completions via `GET /checkout_sessions/{id}`.',
+    spec: ['§12.5'],
+    code: ['src/interop/ap2.ts', 'src/interop/acp.ts'],
+    test: [
+      t('test/interop.ap2-acp.test.ts', 'refuses to mint an unbounded mandate when AP2 IntentMandate omits a cap'),
+      t('test/interop.ap2-acp.test.ts', 'enforces step-up in Ledger when AP2 IntentMandate requires user cart confirmation'),
+      t('test/interop.ap2-acp.test.ts', 'refuses immediate settlement when AP2 IntentMandate requires refundability'),
+      t('test/interop.ap2-acp.test.ts', 'refuses ACP completion when merchant reprices the checkout session total'),
+      t('test/interop.ap2-acp.test.ts', 'holds indeterminate ACP 5xx completion in settling and reconciles via session status'),
+    ],
+    control: 'preventive',
+  },
 
   // ------------------------------------------------------------- residual
   {

@@ -1302,6 +1302,43 @@ That is the correct destination for a deployment that needs preventive control
 and cannot accept custody, and it is out of scope here only because it requires
 on-chain contracts this specification does not define.
 
+### 12.5 Interop with AP2 and ACP
+
+`am/1` sits above checkout and payment-credential rails rather than beside
+them. Interop runs in both directions:
+
+- **AP2 inbound (`IntentMandate` and `CartMandate` -> root `am/1` mandate).**
+  An adapter translates an AP2 `IntentMandate` or `CartMandate` into a root
+  `am/1` mandate so delegation trees, per-node budgets, circuit breakers,
+  step-up approvals, and dual-signed receipts govern downstream spending.
+  Translation **MUST** fail closed:
+  1. Missing, ambiguous (timezone-less), or expired `intent_expiry` /
+     `cart_expiry` **MUST** be rejected.
+  2. Every emitted mandate **MUST** carry a strictly positive finite
+     `max_total` and `currency`; an `IntentMandate` without a cap MUST NOT mint
+     an unbounded root mandate.
+  3. `user_cart_confirmation_required: true` **MUST** map to
+     `step_up: { over: 0 }` unless an already-confirmed `CartMandate` is
+     explicitly attested.
+  4. `requires_refundability: true` **MUST** require an escrow `settle` mode
+     and refuse `immediate`.
+  5. `CartMandate` translation **MUST** require `merchant_authorization` by
+     default and enforce containment against any supplied parent
+     `IntentMandate`.
+- **AP2 outbound (`am/1` receipt -> `PaymentMandate`).** A signed `am/1`
+  receipt exports into an AP2 `PaymentMandate` carrying exact amount/currency
+  and `am1_provenance` (`spend_id`, `chain_hash`, `root_jti`, `receipt_jti`,
+  `receipt_sig`).
+- **ACP inbound (`DelegatedPayment` allowance -> root `am/1` mandate) and
+  outbound (`AcpRail`).** ACP integer minor units map via exact atomic-unit
+  arithmetic with no floating-point rounding (`toAtomicUnits` /
+  `fromAtomicUnits`). Before calling `POST /checkout_sessions/{id}/complete`
+  with a deterministic `Idempotency-Key` derived from `spend_id`, `AcpRail`
+  **MUST** verify that the session's `currency` and `total` match the
+  authorized reservation amount and treat post-submit `408`/`429`/`5xx` and
+  transport errors as indeterminate (`settling`) for reconciliation via
+  `GET /checkout_sessions/{id}`.
+
 ---
 
 ## 13. Offline mode (OPTIONAL)
@@ -1535,6 +1572,7 @@ still valid.
 | Org topology leaked via receipt `path` | Optional `salted` (indexed rollup) and `blinded` (per-spend unlinkable) HMAC-SHA256 path modes hide mandate ids (§11) | `receipt-path-topology-leak` |
 | Key compromise at depth *n* | Blast radius limited to that subtree's caveats; short `exp` + subtree revoke (§5.2) | `key-compromise-at-depth` |
 | Clock skew abuse | ±60s hard tolerance; Ledger clock authoritative online (§4.5) | `clock-skew-abuse` |
+| Unbounded mandate or total substitution across AP2 / ACP interop | Adapters fail closed on missing caps, unconfirmed carts, refundability downgrade, and ACP session total mismatch (§12.5) | `interop-mandate-widening` |
 | Ledger compromise | Full compromise of the principal's funds. Ledger keys **MUST** be in an HSM; receipts are dual-signed so merchant records provide independent reconstruction. | `ledger-compromise` |
 
 **Residual risk worth stating plainly.** The Ledger is a single point of both
@@ -1608,10 +1646,12 @@ else is additive.
    hide cleartext mandate ids while preserving O(1) indexed subtree rollup, or
    `blinded` keyed per `spend` id to prevent cross-receipt clustering at the
    cost of O(N) salted audit scans).
-6. **Interop with AP2 / ACP.** Both are plausible rails or peers beneath this
-   control plane; x402 is implemented (§12.2). An adapter mapping an AP2 Intent
-   Mandate onto a root `am/1` mandate looks tractable and would be worth
-   prototyping early.
+6. ~~**Interop with AP2 / ACP.**~~ **Answered, in §12.5.** Inbound adapters
+   map AP2 `IntentMandate` / `CartMandate` and ACP `DelegatedPayment`
+   allowances onto root `am/1` mandates fail-closed; outbound helpers export
+   AP2 `PaymentMandate` payloads and settle ACP checkout sessions via
+   `AcpRail` with pre-flight total verification and deterministic
+   `Idempotency-Key` reconciliation.
 7. **Escrow across a rail that cannot reverse.** `escrow_schema` assumes funds can
    be held and released. An on-chain transfer clears immediately and
    `SettlementRail.refund` is optional for good reason. Either the Ledger holds
