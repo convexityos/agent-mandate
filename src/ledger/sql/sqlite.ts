@@ -29,13 +29,21 @@ import {
   stepUpWhere,
 } from './codec.js';
 
+import {
+  type AppliedMigration,
+  LEDGER_MIGRATIONS,
+  MIGRATIONS_TABLE,
+  inspectSqliteMigrations,
+  runSqliteMigrations,
+} from './migrations.js';
+
 /**
- * Durable ledger state on SQLite — the local-dev and CLI store.
+ * Durable ledger state on SQLite - the local-dev and CLI store.
  *
  * SQLite is the easy case for the reason the roadmap says: one writer. A
  * `BEGIN IMMEDIATE` takes the database write lock for the whole transaction, so
  * `transact` is serialized by the engine and the root-to-leaf lock ordering that
- * Postgres depends on is vacuous here — there is never a second writer to
+ * Postgres depends on is vacuous here: there is never a second writer to
  * deadlock against. `lockPath` is therefore just a read, and that is not a
  * shortcut: it is what "single-writer, trivial serialization" means.
  *
@@ -62,96 +70,6 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
   DatabaseSync: typeof DatabaseSyncType;
 };
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS mandate_node (
-  jti           TEXT PRIMARY KEY,
-  parent        TEXT,
-  root          TEXT NOT NULL,
-  issuer        TEXT NOT NULL DEFAULT '',
-  token_hash    TEXT NOT NULL,
-  budget_scaled TEXT,
-  currency      TEXT,
-  spent_scaled  TEXT NOT NULL,
-  rate          TEXT,
-  rate_events   TEXT NOT NULL,
-  revoked       INTEGER NOT NULL,
-  status_idx    INTEGER,
-  exp           INTEGER NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS mandate_node_root ON mandate_node (root);
-
-CREATE TABLE IF NOT EXISTS revocation (
-  root TEXT NOT NULL,
-  jti  TEXT NOT NULL,
-  at   INTEGER NOT NULL,
-  PRIMARY KEY (root, jti)
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS reservation (
-  id            TEXT PRIMARY KEY,
-  root          TEXT NOT NULL,
-  status        TEXT NOT NULL,
-  created_at    INTEGER NOT NULL,
-  expires_at    INTEGER NOT NULL,
-  has_directive INTEGER NOT NULL,
-  escalated     INTEGER NOT NULL,
-  doc           TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS reservation_sweep
-  ON reservation (status, has_directive, expires_at);
-CREATE INDEX IF NOT EXISTS reservation_order ON reservation (created_at, id);
-
-CREATE TABLE IF NOT EXISTS spend_history (
-  root          TEXT NOT NULL,
-  ts            INTEGER NOT NULL,
-  amount_scaled TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS spend_history_root_ts ON spend_history (root, ts);
-
-CREATE TABLE IF NOT EXISTS task_total (
-  task_id      TEXT PRIMARY KEY,
-  total_scaled TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS merchant_seen (
-  root TEXT NOT NULL,
-  host TEXT NOT NULL,
-  PRIMARY KEY (root, host)
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS step_up (
-  handle            TEXT PRIMARY KEY,
-  root              TEXT NOT NULL,
-  resource          TEXT NOT NULL,
-  max_amount_scaled TEXT NOT NULL,
-  currency          TEXT NOT NULL,
-  expires_at        INTEGER NOT NULL,
-  used              INTEGER NOT NULL,
-  state             TEXT NOT NULL,
-  requested_at      INTEGER NOT NULL,
-  agent             TEXT NOT NULL,
-  task_id           TEXT,
-  decision          TEXT
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS kill_switch (
-  root TEXT PRIMARY KEY
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS nonce (
-  nonce      TEXT PRIMARY KEY,
-  expires_at INTEGER NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS idempotency (
-  key          TEXT PRIMARY KEY,
-  request_hash TEXT NOT NULL,
-  response     TEXT NOT NULL,
-  created_at   INTEGER NOT NULL,
-  expires_at   INTEGER NOT NULL
-) STRICT;
-`;
-
 /** STRICT tables reject a bound boolean, and SQLite has no boolean type anyway. */
 function bind(v: unknown): SQLInputValue {
   if (typeof v === 'boolean') return v ? 1 : 0;
@@ -159,16 +77,18 @@ function bind(v: unknown): SQLInputValue {
 }
 
 /**
- * Every table and column this store reads, taken from `SCHEMA` itself by
- * applying it to an empty in-memory database. Not a second list: a column added
- * to `SCHEMA` is required of a read-only open the moment it is added, with
- * nothing else to remember to edit.
+ * Every ledger table and column this store reads, derived by applying
+ * `LEDGER_MIGRATIONS` to an empty in-memory database (excluding the internal
+ * `schema_migrations` ledger). Not a second list: any column added by a new
+ * migration is required of a read-only open automatically.
  */
 function declaredColumns(): Map<string, Set<string>> {
   const mem = new DatabaseSync(':memory:');
   try {
-    mem.exec(SCHEMA);
-    const tables = mem.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Row[];
+    runSqliteMigrations(mem, LEDGER_MIGRATIONS);
+    const tables = mem
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name != ?")
+      .all(MIGRATIONS_TABLE) as Row[];
     return columnsOf(
       mem,
       tables.map((r) => r['name'] as string),
@@ -183,6 +103,21 @@ function columnsOf(db: DatabaseSyncType, tables: string[]): Map<string, Set<stri
   return new Map(
     tables.map((t) => [t, new Set((stmt.all(t) as Row[]).map((r) => r['name'] as string))]),
   );
+}
+
+function missingLedgerColumns(db: DatabaseSyncType): string[] {
+  const declared = declaredColumns();
+  const present = columnsOf(db, [...declared.keys()]);
+  const missing: string[] = [];
+  for (const [table, columns] of declared) {
+    const have = present.get(table)!;
+    if (have.size === 0) {
+      missing.push(table);
+      continue;
+    }
+    for (const c of columns) if (!have.has(c)) missing.push(`${table}.${c}`);
+  }
+  return missing;
 }
 
 /** See `SqliteStoreOptions.readOnly`. */
@@ -200,17 +135,11 @@ function openReadOnly(location: string | undefined): DatabaseSyncType {
     // it would not refuse a journal-mode change, and nothing here issues one.
     db.exec('PRAGMA query_only = ON');
     db.exec('PRAGMA busy_timeout = 5000');
-    const declared = declaredColumns();
-    const present = columnsOf(db, [...declared.keys()]);
-    const missing: string[] = [];
-    for (const [table, columns] of declared) {
-      const have = present.get(table)!;
-      if (have.size === 0) {
-        missing.push(table);
-        continue;
-      }
-      for (const c of columns) if (!have.has(c)) missing.push(`${table}.${c}`);
-    }
+
+    // Refuse databases migrated by a newer binary or with altered migration checksums.
+    inspectSqliteMigrations(db, LEDGER_MIGRATIONS);
+
+    const missing = missingLedgerColumns(db);
     if (missing.length > 0) {
       throw new Error(
         `ledger file ${location} predates this store, missing ${missing.join(', ')}. ` +
@@ -233,11 +162,11 @@ export interface SqliteStoreOptions {
    * process that owns it: a status command, a console, an audit export.
    *
    * A writable open is not that, even when nothing is spent through it. The
-   * constructor sets the journal mode, creates any table the file lacks, and
-   * adds any column it lacks, so opening a file to look at it can migrate it out
-   * from under the gateway that owns it. Read-only skips all of that, opens the
-   * file with SQLite's own read-only flag so the engine refuses every write, and
-   * refuses `transact` outright.
+   * constructor sets the journal mode and runs pending schema migrations, so
+   * opening a file to look at it can migrate it out from under the gateway
+   * that owns it. Read-only skips all of that, opens the file with SQLite's
+   * own read-only flag so the engine refuses every write, and refuses
+   * `transact` outright.
    *
    * It needs a file that exists and already has every table and column this
    * store reads. A file that predates one is refused by name rather than read
@@ -268,44 +197,59 @@ export class SqliteStore implements LedgerStore {
     this.db = new DatabaseSync(opts.location ?? ':memory:');
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA busy_timeout = 5000');
-    this.db.exec(SCHEMA);
-    this.addMissingColumns('mandate_node', [
-      ['issuer', "TEXT NOT NULL DEFAULT ''"],
-      ['status_idx', 'INTEGER'],
-    ]);
-    this.addMissingColumns('step_up', [
-      ['state', "TEXT NOT NULL DEFAULT 'pending'"],
-      ['requested_at', 'INTEGER NOT NULL DEFAULT 0'],
-      ['agent', "TEXT NOT NULL DEFAULT ''"],
-      ['task_id', 'TEXT'],
-      ['decision', 'TEXT'],
-    ]);
-    // After the column check, not inside SCHEMA: an index over columns a
-    // pre-existing table does not have yet fails, and takes the DDL with it.
-    this.db.exec('CREATE INDEX IF NOT EXISTS step_up_queue ON step_up (state, requested_at)');
+    runSqliteMigrations(this.db, LEDGER_MIGRATIONS, { clock: this.clock });
+
+    // If an external tool dropped a baseline table or column after migrations
+    // were recorded, heal idempotently using the baseline v1..v3 definitions
+    // rather than failing on the first read or write.
+    if (missingLedgerColumns(this.db).length > 0) {
+      this.repairBaselineSchema();
+    }
   }
 
-  /**
-   * `CREATE TABLE IF NOT EXISTS` is not a migration — it does nothing at all to
-   * a table that already exists, so a database created before a column was added
-   * fails on the first write that mentions it.
-   *
-   * SQLite has no `ADD COLUMN IF NOT EXISTS`, so existence is checked against
-   * `pragma_table_info` first. This is a stopgap for additive columns and not a
-   * migration framework: there is no version table and nothing here can rename,
-   * drop, or backfill.
-   *
-   * The default for `state` is `pending` rather than `approved` on purpose. Under
-   * the old semantics any handle was spendable; carrying those rows forward as
-   * approved would carry the self-approval hole forward with them.
-   */
-  private addMissingColumns(table: string, columns: Array<[string, string]>): void {
-    const present = new Set(
-      this.all('SELECT name FROM pragma_table_info(?)', [table]).map((r) => r['name'] as string),
-    );
-    for (const [name, declaration] of columns) {
-      if (!present.has(name)) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${declaration}`);
+  private repairBaselineSchema(): void {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const ctx = {
+        exec: (sql: string) => this.db.exec(sql),
+        query: (sql: string, params: unknown[] = []) => this.all(sql, params),
+        hasColumn: (table: string, column: string) =>
+          this.all('SELECT name FROM pragma_table_info(?)', [table]).some(
+            (r) => r['name'] === column,
+          ),
+        addColumnIfMissing: (table: string, column: string, declaration: string) => {
+          const present = this.all('SELECT name FROM pragma_table_info(?)', [table]).some(
+            (r) => r['name'] === column,
+          );
+          if (!present) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
+        },
+      };
+      for (const m of LEDGER_MIGRATIONS.slice(0, 3)) {
+        if (typeof m.sqlite === 'string') {
+          this.db.exec(m.sqlite);
+        } else {
+          m.sqlite(ctx);
+        }
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      try {
+        this.db.exec('ROLLBACK');
+      } catch {
+        // Ignore rollback failure.
+      }
+      throw err;
     }
+  }
+
+  /** Highest migration version recorded in `schema_migrations` (0 if uninitialized). */
+  schemaVersion(): number {
+    return inspectSqliteMigrations(this.db, LEDGER_MIGRATIONS).currentVersion;
+  }
+
+  /** Ordered list of migrations applied to this database. */
+  appliedMigrations(): AppliedMigration[] {
+    return inspectSqliteMigrations(this.db, LEDGER_MIGRATIONS).applied;
   }
 
   close(): void {

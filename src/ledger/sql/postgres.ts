@@ -26,6 +26,13 @@ import {
   stepUpToRow,
   stepUpWhere,
 } from './codec.js';
+import {
+  type AppliedMigration,
+  LEDGER_MIGRATIONS,
+  type MigrationRunResult,
+  inspectPostgresMigrations,
+  runPostgresMigrations,
+} from './migrations.js';
 
 /**
  * Durable ledger state on Postgres — the real one.
@@ -262,11 +269,34 @@ export class PostgresStore implements LedgerStore {
     this.maxRetries = opts.maxRetries ?? 5;
   }
 
-  /** Idempotent DDL. Separate from the constructor because it awaits. */
-  async init(): Promise<void> {
+  /**
+   * Run pending versioned migrations inside a single transaction guarded by
+   * `pg_advisory_xact_lock`, preventing concurrent replica startups from racing.
+   */
+  async init(): Promise<MigrationRunResult> {
     const c = await this.pool.connect();
     try {
-      await c.query(SCHEMA);
+      return await runPostgresMigrations(c, LEDGER_MIGRATIONS, { clock: this.clock });
+    } finally {
+      c.release?.();
+    }
+  }
+
+  /** Highest migration version recorded in `schema_migrations` (0 if uninitialized). */
+  async schemaVersion(): Promise<number> {
+    const c = await this.pool.connect();
+    try {
+      return (await inspectPostgresMigrations(c, LEDGER_MIGRATIONS)).currentVersion;
+    } finally {
+      c.release?.();
+    }
+  }
+
+  /** Ordered list of migrations applied to this Postgres database. */
+  async appliedMigrations(): Promise<AppliedMigration[]> {
+    const c = await this.pool.connect();
+    try {
+      return (await inspectPostgresMigrations(c, LEDGER_MIGRATIONS)).applied;
     } finally {
       c.release?.();
     }
