@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it as baseIt } from 'vitest';
 
 import {
   type Caveats,
@@ -113,6 +113,9 @@ const parseDurationSeconds = (s: string) => DURATIONS[s]!;
 const wellFormed = (c: Caveats) => validateCaveats(c).ok;
 
 const RUNS = { numRuns: 2000 } as const;
+// Vitest 4 enforces testTimeout on synchronous tests; 2000-run fast-check
+// properties regularly exceed the 5s default.
+const it = (name: string, fn: () => void) => baseIt(name, fn, 30_000);
 
 describe('lattice algebra', () => {
   it('narrows is reflexive', () => {
