@@ -1,17 +1,98 @@
 {
-  "name": "agent-mandate",
+  "name": "@vitna/mandate",
   "version": "0.1.0",
-  "private": true,
+  "license": "Apache-2.0",
   "type": "module",
-  "description": "Reference caveat lattice and chain verifier for the Agent Mandate Protocol v1 (am/1)",
+  "description": "Fail-closed caveat-lattice and budget enforcement runtime for AP2, ACP, and HTTP 402/x402 (Agent Mandate Protocol v1, am/1)",
+  "keywords": [
+    "agent-mandate",
+    "am-1",
+    "ap2",
+    "acp",
+    "x402",
+    "http-402",
+    "caveats",
+    "capability",
+    "jws",
+    "rfc9421",
+    "mcp",
+    "ai-agents"
+  ],
+  "homepage": "https://github.com/convexityos/agent-mandate#readme",
+  "bugs": {
+    "url": "https://github.com/convexityos/agent-mandate/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/convexityos/agent-mandate.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./sqlite": {
+      "types": "./dist/src/ledger/sql/sqlite.d.ts",
+      "import": "./dist/src/ledger/sql/sqlite.js"
+    },
+    "./ledger/sql/sqlite": {
+      "types": "./dist/src/ledger/sql/sqlite.d.ts",
+      "import": "./dist/src/ledger/sql/sqlite.js"
+    },
+    "./postgres": {
+      "types": "./dist/src/ledger/sql/postgres.d.ts",
+      "import": "./dist/src/ledger/sql/postgres.js"
+    },
+    "./ledger/sql/postgres": {
+      "types": "./dist/src/ledger/sql/postgres.d.ts",
+      "import": "./dist/src/ledger/sql/postgres.js"
+    },
+    "./migrations": {
+      "types": "./dist/src/ledger/sql/migrations.d.ts",
+      "import": "./dist/src/ledger/sql/migrations.js"
+    },
+    "./ledger/sql/migrations": {
+      "types": "./dist/src/ledger/sql/migrations.d.ts",
+      "import": "./dist/src/ledger/sql/migrations.js"
+    },
+    "./interop/ap2": {
+      "types": "./dist/src/interop/ap2.d.ts",
+      "import": "./dist/src/interop/ap2.js"
+    },
+    "./interop/acp": {
+      "types": "./dist/src/interop/acp.d.ts",
+      "import": "./dist/src/interop/acp.js"
+    },
+    "./mcp/gateway": {
+      "types": "./dist/src/mcp/gateway.d.ts",
+      "import": "./dist/src/mcp/gateway.js"
+    },
+    "./vectors/*": "./vectors/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/src/",
+    "bin/",
+    "vectors/",
+    "spec/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:pack": "node test/package.smoke.mjs",
     "vectors": "npm run build && node dist/test/vectors.emit.js",
     "am": "npm run build --silent && node bin/am.mjs",
     "threats": "npm run build && node dist/test/threats.emit.js"

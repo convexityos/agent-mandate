@@ -12,3 +12,4 @@ demo-key.json
 
 *.log
 .DS_Store
+vitest-results.json
