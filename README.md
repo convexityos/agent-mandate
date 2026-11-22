@@ -1,14 +1,44 @@
-# agent-mandate
+# @vitna/mandate (agent-mandate)
 
 Reference implementation of the caveat lattice and chain verifier for the
-**Agent Mandate Protocol v1** ([`spec/agent-mandate-v1.md`](spec/agent-mandate-v1.md)) —
-delegated, attenuable, auditable spending authority for autonomous agents.
+**Agent Mandate Protocol v1** ([`spec/agent-mandate-v1.md`](spec/agent-mandate-v1.md)):
+**not a rival payment rail, but the fail-closed caveat-lattice and budget
+enforcement runtime for Google AP2, OpenAI/Stripe ACP, and HTTP 402/x402**.
+Licensed under [Apache-2.0](LICENSE).
+
+## Protocol interop
+
+- **Google AP2 ([`src/interop/ap2.ts`](src/interop/ap2.ts)):** `mandateClaimsFromAp2Intent`,
+  `issueMandateFromAp2Intent`, `mandateClaimsFromAp2Cart`, `issueMandateFromAp2Cart`,
+  and `toAp2PaymentMandate`. Fails closed on missing spending caps, expired mandates,
+  wildcard merchants, refundability mismatches, and unconfirmed carts.
+- **OpenAI/Stripe ACP ([`src/interop/acp.ts`](src/interop/acp.ts)):**
+  `mandateClaimsFromAcpAllowance`, `issueMandateFromAcpAllowance`, and `AcpRail`.
+  Uses exact minor-unit conversion (`fromAtomicUnits` / `toAtomicUnits`), pre-flight
+  checkout total and currency verification, and deterministic `spendId` idempotency.
+- **HTTP 402 and x402 quote binding ([`src/quote.ts`](src/quote.ts),
+  [`src/rail/x402.ts`](src/rail/x402.ts), [`src/rail/x402-noncustodial.ts`](src/rail/x402-noncustodial.ts)):**
+  `quoteHashForHttpChallenge`, `quoteHashForX402Challenge`, `quoteHashFromX402Response`,
+  `quotesMatch`, and `MemoryQuoteStore` bind reserve, retry, and receipt bytes to exact
+  merchant quote challenges.
+
+## Install and package entry points
 
 ```bash
-npm install && npm test
+# Consume as an npm dependency (packaged as @vitna/mandate)
+npm install @vitna/mandate
+
+# Local repository development and test suite
+npm ci && npm test
 ```
 
-**Conformance vectors** live in [`vectors/`](vectors/) — chain in, verdict out,
+SQLite (`@vitna/mandate/sqlite`), Postgres (`@vitna/mandate/postgres`), and schema
+migrations (`@vitna/mandate/migrations`) are exported as explicit subpaths rather than
+from the root barrel so importing `@vitna/mandate` does not trigger Node's `node:sqlite`
+`ExperimentalWarning` or require optional database drivers. Conformance vector fixtures
+are exported under `@vitna/mandate/vectors/*`.
+
+**Conformance vectors** live in [`vectors/`](vectors/) - chain in, verdict out,
 so an implementation in any language can check itself without reading this
 TypeScript. Every expectation there is written by hand from the spec rather than
 recorded from this code, which is the only version of that artifact worth
@@ -30,9 +60,13 @@ publishing. See [`vectors/README.md`](vectors/README.md).
 | [`src/ledger/store.ts`](src/ledger/store.ts) | Persistence seam; in-memory reference impl with a real critical section |
 | [`src/ledger/sql/sqlite.ts`](src/ledger/sql/sqlite.ts) | Durable store on `node:sqlite` — one writer, serialization for free; `readOnly` for a reader beside the owner |
 | [`src/ledger/sql/postgres.ts`](src/ledger/sql/postgres.ts) | Durable store on Postgres — root-to-leaf lock order, retry on deadlock |
+| [`src/ledger/sql/migrations.ts`](src/ledger/sql/migrations.ts) | Versioned, checksum-verified SQL migrations for SQLite and Postgres (`schema_migrations`) |
 | [`src/ledger/breakers.ts`](src/ledger/breakers.ts) | §10.4 — velocity, burn rate, task ceiling, novel merchant, kill |
 | [`src/ledger/reconciler.ts`](src/ledger/reconciler.ts) | §12.2.3 — resolve `settling`, escalate the undecidable, sweep the expired |
 | [`src/spend.ts`](src/spend.ts) | §9 — spend token mint, and the five-check merchant verifier |
+| [`src/quote.ts`](src/quote.ts) | §14, §18 #3: cryptographic HTTP 402 and x402 quote binding (`MemoryQuoteStore`) |
+| [`src/interop/ap2.ts`](src/interop/ap2.ts) | §12.5: fail-closed Google AP2 IntentMandate / CartMandate adapters and provenance export |
+| [`src/interop/acp.ts`](src/interop/acp.ts) | §12.5: fail-closed OpenAI/Stripe ACP allowance adapter and `AcpRail` settlement |
 | [`src/receipt.ts`](src/receipt.ts) | §11 — canonical JSON, dual-signable receipts |
 | [`src/http/signature.ts`](src/http/signature.ts) | RFC 9421 HTTP Message Signatures, Ed25519 |
 | [`src/http/sfv.ts`](src/http/sfv.ts) | RFC 8941 Structured Fields (the dictionary subset) |
@@ -76,7 +110,7 @@ step. [`test/http.e2e.test.ts`](test/http.e2e.test.ts) drives the whole loop:
 ## Usage
 
 ```ts
-import { verifyChain, generateAgentKey } from './src/index.js';
+import { verifyChain, generateAgentKey } from '@vitna/mandate';
 
 const result = await verifyChain(chainOfJwsStrings, {
   now: Math.floor(Date.now() / 1000),
@@ -111,7 +145,7 @@ attacker-controlled input on the spend path, and a thrown exception is one stray
 ### Paying for a request, in one import
 
 ```ts
-import { mandatedFetch, localMint, refusalCode } from './src/index.js';
+import { mandatedFetch, localMint, refusalCode } from '@vitna/mandate';
 
 const fetch = mandatedFetch({ tokens: chainOfJwsStrings, key: agentKey, mint: localMint(ledger) });
 
@@ -175,7 +209,7 @@ The gateway is an MCP server to your client and an MCP client to the server it
 wraps. **The wrapped server is not modified and does not know it is there.**
 
 ```ts
-import { McpMandateGateway, StdioUpstream, serveStdio } from './src/index.js';
+import { McpMandateGateway, StdioUpstream, serveStdio } from '@vitna/mandate';
 
 const broker = new StdioUpstream({ command: 'npx', args: ['-y', 'some-mcp-server'] });
 await broker.start();
@@ -256,7 +290,7 @@ is the *question*; the answer is a JWS signed by the principal that restates the
 terms, so the bytes signed are the terms agreed:
 
 ```ts
-import { ApprovalService, signStepUpDecision } from './src/index.js';
+import { ApprovalService, signStepUpDecision } from '@vitna/mandate';
 
 // Mount anywhere; it carries no auth of its own, because the authority is the
 // signature inside the decision, not reachability of the endpoint.
@@ -292,7 +326,7 @@ that handle to the agent.
 ### Running the ledger as a service
 
 ```ts
-import { LedgerService, ApprovalService, ConsoleService, serve } from './src/index.js';
+import { LedgerService, ApprovalService, ConsoleService, serve } from '@vitna/mandate';
 
 serve({
   port: 8787,
@@ -335,7 +369,7 @@ with the same key that signs spend tokens, served at
 `{ledger}/v1/status/{root_jti}`:
 
 ```ts
-import { StatusListCache, statusListUri, verifyChain } from './src/index.js';
+import { StatusListCache, statusListUri, verifyChain } from '@vitna/mandate';
 
 const status = new StatusListCache({
   ledgerJwk,
@@ -381,7 +415,7 @@ parallel presentation, and a status list does nothing about that.
 ### The principal console
 
 ```ts
-import { ConsoleService } from './src/index.js';
+import { ConsoleService } from '@vitna/mandate';
 
 const console_ = new ConsoleService({ ledger, basePath: '/console' });
 // Mount console_.handle(req) on your server. It serves one static page and
@@ -412,7 +446,7 @@ Paying is an external call, so it has a third outcome: neither settled nor safe
 to refund. Those wait in `settling` until something asks the rail what happened.
 
 ```ts
-import { Reconciler } from './src/index.js';
+import { Reconciler } from '@vitna/mandate';
 
 const reconciler = new Reconciler({
   ledger,
@@ -792,29 +826,36 @@ Regenerate with `npm run threats`.
 
 Not audited, not production-ready.
 
-There are 52 published conformance vectors, and they have teeth: swapping the
-verifier to compare each link against its immediate parent — the natural-looking
-implementation — fails exactly the two vectors that name that defect.
+There are 45 published conformance vectors (`vectors/chain.json`,
+`vectors/caveats.json`, `vectors/uri.json`), and they have teeth: swapping the
+verifier to compare each link against its immediate parent - the natural-looking
+implementation - fails the vectors that name that defect.
 
-Ledger state is durable — SQLite and Postgres, with the concurrency properties
-run against real row locks rather than a `Map` — the MCP gateway and the
+Ledger state is durable (SQLite and Postgres, with the concurrency properties
+run against real row locks rather than a `Map`), the MCP gateway and the
 PreToolUse hook put a mandate in front of real tool calls, a step-up needs a
 signature from the principal rather than the handle the agent was just handed, a
 reconciler resolves stuck settlements and escalates the ones it cannot, the
 ledger runs as a daemon with idempotency inside the debit transaction, and the
 principal has a console with a working kill switch. Revocation propagates to
 offline merchants through signed status lists rather than waiting out `exp`.
+Cryptographic 402/x402 quote binding (`src/quote.ts`), salted and blinded receipt
+path privacy modes (`src/receipt.ts`), versioned SQL migrations
+(`src/ledger/sql/migrations.ts`), and fail-closed AP2/ACP adapters (`src/interop/`)
+are implemented and covered by the test suite.
 
-Still missing: the §18 open questions marked *build* in the roadmap — quote
-binding, AP2/ACP interop, salted-hash paths in receipts — and a deployment that
-tracks live offline grants so the §13 risk budget has something to sum. Escrow is
-deliberately absent; every path through it ends with the ledger holding the
-float.
+Still open: a deployment that tracks live offline grants so the §13 risk budget
+has something to sum, an external security audit, and escrow (deliberately
+absent; every path through it ends with the ledger holding the float).
 
 No payment has ever been made from this codebase and no funded key has ever been
 loaded into it. Every network test is a read-only `eth_call` or a testnet
 signature with an ephemeral key.
 
-The caveat comparators are the part worth reviewing hardest — their semantics are
+The caveat comparators are the part worth reviewing hardest - their semantics are
 a wire-format commitment, and a mandate issued today has to verify identically in
 30 days (spec §17.3).
+
+## License
+
+Apache License, Version 2.0. See [LICENSE](LICENSE).

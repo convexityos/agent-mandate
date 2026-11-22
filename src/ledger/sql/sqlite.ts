@@ -195,15 +195,20 @@ export class SqliteStore implements LedgerStore {
       return;
     }
     this.db = new DatabaseSync(opts.location ?? ':memory:');
-    this.db.exec('PRAGMA journal_mode = WAL');
-    this.db.exec('PRAGMA busy_timeout = 5000');
-    runSqliteMigrations(this.db, LEDGER_MIGRATIONS, { clock: this.clock });
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL');
+      this.db.exec('PRAGMA busy_timeout = 5000');
+      runSqliteMigrations(this.db, LEDGER_MIGRATIONS, { clock: this.clock });
 
-    // If an external tool dropped a baseline table or column after migrations
-    // were recorded, heal idempotently using the baseline v1..v3 definitions
-    // rather than failing on the first read or write.
-    if (missingLedgerColumns(this.db).length > 0) {
-      this.repairBaselineSchema();
+      // If an external tool dropped a baseline table or column after migrations
+      // were recorded, heal idempotently using the baseline v1..v3 definitions
+      // rather than failing on the first read or write.
+      if (missingLedgerColumns(this.db).length > 0) {
+        this.repairBaselineSchema();
+      }
+    } catch (err) {
+      this.db.close();
+      throw err;
     }
   }
 
