@@ -1,0 +1,96 @@
+name: Release @vitna/mandate
+
+# Publishes @vitna/mandate to npm from a version tag via npm OIDC trusted
+# publishing (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+#
+# Fails closed before publishing if the tag version disagrees with
+# package.json, if npm is older than the OIDC exchange floor (11.5.1), if
+# typecheck or Postgres ledger tests fail, or if the fresh-sandbox pack +
+# conformance vector smoke test fails.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: am
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_URL: postgres://postgres:am@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm supports OIDC trusted publishing
+        run: |
+          have=$(npm --version)
+          floor=11.5.1
+          if [ "$(printf '%s\n%s\n' "$have" "$floor" | sort -V | head -1)" != "$floor" ]; then
+            echo "npm $have cannot use trusted publishing; $floor is the floor"
+            exit 1
+          fi
+          echo "npm $have supports OIDC trusted publishing"
+
+      - name: Verify tag matches package.json version
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          declared=$(node -p "require('./package.json').version")
+          if [ "$tagged" != "$declared" ]; then
+            echo "tag version $tagged disagrees with package.json version $declared"
+            exit 1
+          fi
+          echo "releasing @vitna/mandate@$declared"
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npx vitest run --reporter=default --reporter=json --outputFile=vitest-results.json
+
+      - name: Verify Postgres ledger tests ran
+        run: |
+          node -e '
+            const r = require("./vitest-results.json");
+            const pg = r.testResults.filter((f) => f.name.endsWith("ledger.postgres.test.ts"));
+            const passed = pg.flatMap((f) => f.assertionResults).filter((a) => a.status === "passed").length;
+            const other = pg.flatMap((f) => f.assertionResults).filter((a) => a.status !== "passed").length;
+            console.log(`postgres ledger tests: ${passed} passed, ${other} not passed`);
+            if (passed === 0 || other > 0) process.exit(1);
+          '
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack and sandbox install smoke test
+        run: npm run test:pack
+
+      - name: Preview published tarball
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        run: npm publish --access public
